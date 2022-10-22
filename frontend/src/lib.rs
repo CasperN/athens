@@ -2,13 +2,13 @@ use wasm_bindgen::prelude::*;
 use web_sys::HtmlTextAreaElement;
 use yew::prelude::*;
 
-#[derive(PartialEq, Properties)]
-struct ListEntryProperties {
-    value: String,
+#[derive(Properties, PartialEq)]
+struct ListEntryP {
+    id: usize,
 }
 
 #[function_component(ListEntry)]
-fn list_entry(properties: &ListEntryProperties) -> Html {
+fn list_entry(p: &ListEntryP) -> Html {
     let user_value = use_state(|| String::new());
     let oninput = {
         let uv = user_value.clone();
@@ -20,11 +20,36 @@ fn list_entry(properties: &ListEntryProperties) -> Html {
 
     html! {
         <li draggable="true">
-        {&properties.value}
+        <b> {p.id}{":  "} </b>
         <input oninput={oninput.clone()} type="text"/>
         {&*user_value}
         </li>
 
+    }
+}
+
+//#[derive(Properties, PartialEq)]
+
+#[function_component(List)]
+fn list() -> Html {
+    let elements = use_state(|| Vec::new());
+    let add_li = {
+        let elements = elements.clone();
+        Callback::from(move |_| {
+            let mut e = (*elements).clone();
+            let n = e.len();
+            e.push(html! {
+                <ListEntry id={n}/>
+            });
+            elements.set(e);
+        })
+    };
+
+    html! {
+        <>
+        { for (*elements).clone() }
+        <button onclick={add_li}> {"Another!"} </button>
+        </>
     }
 }
 
@@ -49,16 +74,13 @@ fn app() -> Html {
     };
 
     let style = format!("background-color:{};", *color);
-    let list_entry = ListEntryProperties {
-        value: "List entry: ".to_string(),
-    };
     html! {
         <>
         <h1 style={style}>
             { "Hello world!" }
         <button onclick={ cb.clone() }>{ "Color me!" }</button>
         </h1>
-        <ListEntry value={list_entry.value}/>
+        <List/>
         </>
     }
 }
