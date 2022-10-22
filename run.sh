@@ -14,7 +14,6 @@ wasm-bindgen \
     --target web --out-dir server/static/
 
 
-
 # Build and run backend.
-pushd server
-cargo r
+# pushd server
+# cargo r
