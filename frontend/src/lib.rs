@@ -2,37 +2,72 @@ use wasm_bindgen::prelude::*;
 use web_sys::HtmlTextAreaElement;
 use yew::prelude::*;
 
-struct Entry;
+struct Entry {
+    editing: bool,
+}
+
+#[derive(Clone, Copy)]
+enum EntryM {
+    StartEditing,
+    StopEditing,
+}
+
 #[derive(PartialEq, Properties)]
 struct EntryP {
     id: usize,
-    text: String,  // Should this just be shared?
+    text: String, // Should this just be shared?
     set_text: Callback<String>,
 }
 impl Component for Entry {
     type Properties = EntryP;
-    type Message = ();
+    type Message = EntryM;
 
     fn create(_ctx: &Context<Self>) -> Self {
-        Entry
+        Entry { editing: false }
+    }
+    fn update(&mut self, _ctx: &Context<Self>, msg: EntryM) -> bool {
+        match msg {
+            EntryM::StartEditing => self.editing = true,
+            EntryM::StopEditing => self.editing = false,
+        };
+        true
     }
     fn view(&self, ctx: &Context<Self>) -> Html {
+        let start_editing = ctx.link().callback(|_| EntryM::StartEditing);
+        let stop_editing = ctx.link().callback(|_| EntryM::StopEditing);
+        let stop_editing_on_enter = {
+            let link = ctx.link().clone();
+            Callback::from(move |e: KeyboardEvent| {
+                const ENTER_KEY_CODE: u32 = 13;
+                if e.key_code() == ENTER_KEY_CODE {
+                    link.send_message(EntryM::StopEditing);
+                }
+            })
+        };
+        let emit_text = {
+            let set_text = ctx.props().set_text.clone();
+            Callback::from(move |e: InputEvent| {
+                let t: HtmlTextAreaElement = e.target_unchecked_into();
+                set_text.emit(t.value())
+            })
+        };
+
         html! {
             <input
                 type="text"
-                oninput={
-                    let set_text = ctx.props().set_text.clone();
-                    Callback::from(move |e: InputEvent| {
-                        let t: HtmlTextAreaElement = e.target_unchecked_into();
-                        set_text.emit(t.value())
-                    })
-                }
+                size="80"
+                disabled={!self.editing}
+                onclick={start_editing}
+                onfocusout={stop_editing}
+                value={ctx.props().text.clone()}
+                onkeypress={stop_editing_on_enter}
+                oninput={emit_text}
             />
         }
     }
 }
 
-struct List2 {
+struct List {
     entries: Vec<EntryData>,
     dragged: Option<usize>,
     dragged_over: Option<usize>,
@@ -41,23 +76,27 @@ struct List2 {
 struct EntryData(String);
 
 #[derive(Clone)]
-enum List2M {
+enum ListM {
     AddEntry,
     SetDragged(Option<usize>),
     SetDraggedOver(Option<usize>),
     Dropped,
-    SetEntryText(usize, String)
+    SetEntryText(usize, String),
 }
 
-impl List2 {
+impl List {
     fn move_entries(&mut self, from: usize, to: usize) {
+        if from == to {
+            return;
+        }
+
         let entry = self.entries.remove(from);
         self.entries.insert(to, entry);
     }
 }
 
-impl Component for List2 {
-    type Message = List2M;
+impl Component for List {
+    type Message = ListM;
     type Properties = ();
 
     fn create(_ctx: &Context<Self>) -> Self {
@@ -69,67 +108,75 @@ impl Component for List2 {
     }
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            List2M::AddEntry => {
+            ListM::AddEntry => {
                 let e = format!("entry: {:?}", self.entries.len());
                 self.entries.push(EntryData(e));
                 true
             }
-            List2M::SetDragged(i) => {
+            ListM::SetDragged(i) => {
                 self.dragged = i;
                 false
             }
-            List2M::SetDraggedOver(x) => {
+            ListM::SetDraggedOver(x) => {
                 self.dragged_over = x;
                 false
             }
-            List2M::Dropped => {
+            ListM::Dropped => {
                 if let (Some(from), Some(to)) = (self.dragged, self.dragged_over) {
                     self.move_entries(from, to);
+                    self.dragged = Some(from);
                     true
                 } else {
                     // dragged and dragover should both be set by web events before
                     // dropped is called and before dragexit.
-                    log::error!("Bad drag and drop: from:{:?} to:{:?}", self.dragged, self.dragged_over);
+                    log::error!(
+                        "Bad drag and drop: from:{:?} to:{:?}",
+                        self.dragged,
+                        self.dragged_over
+                    );
                     false
                 }
             }
-            List2M::SetEntryText(i, text) => {
+            ListM::SetEntryText(i, text) => {
                 self.entries[i].0 = text;
                 true
             }
         }
     }
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let addentry = ctx.link().callback(|_| List2M::AddEntry);
+        let addentry = ctx.link().callback(|_| ListM::AddEntry);
         let entries: Vec<_> = self
             .entries
             .iter()
             .enumerate()
             .map(|(i, entry)| {
-                // let set_being_dragged = ctx.link().callback(move |_| List2M::SetDragged(Some(i)));
-                let set_dragged = |d| ctx.link().callback(move |_event: DragEvent| {
-                    List2M::SetDragged(d)
-                });
-                let set_dragged_over = |d| ctx.link().callback(move |_event: DragEvent| {
-                    List2M::SetDraggedOver(d)
-                });
+                let set_dragged = |d| {
+                    ctx.link()
+                        .callback(move |_event: DragEvent| ListM::SetDragged(d))
+                };
+                let set_dragged_over = |d| {
+                    ctx.link()
+                        .callback(move |_event: DragEvent| ListM::SetDraggedOver(d))
+                };
+                let drop = ctx.link().callback(|_e: DragEvent| ListM::Dropped);
+                let set_entry_cb = ctx.link().callback(move |s| ListM::SetEntryText(i, s));
 
                 html! {
                     <li draggable="true"
                         ondragstart={set_dragged(Some(i))}
                         ondragend={set_dragged(None)}
                         ondragover={ctx.link().callback(move |e: DragEvent| {
-                            e.prevent_default();
-                            List2M::SetDraggedOver(Some(i))
+                            e.prevent_default();  // Neccessary for ondrop to be called.
+                            ListM::SetDraggedOver(Some(i))
                         })}
                         ondragleave={set_dragged_over(None)}
-                        ondrop={ctx.link().callback(|_e: DragEvent| {
-                            List2M::Dropped
-                        })}
-                    > <Entry id={i} text={entry.0.clone()} set_text={
-                        ctx.link().callback(move |s| List2M::SetEntryText(i, s)) }/>
-                        {entry.0.clone()}
-
+                        ondrop={drop}
+                    >
+                        <Entry
+                            id={i}
+                            text={entry.0.clone()}
+                            set_text={set_entry_cb}
+                        />
                     </li>
                 }
             })
@@ -172,7 +219,7 @@ fn app() -> Html {
             { "Hello world!" }
         <button onclick={ cb.clone() }>{ "Color me!" }</button>
         </h1>
-        <List2/>
+        <List/>
         </>
     }
 }
