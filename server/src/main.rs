@@ -15,10 +15,17 @@ fn index() -> RawHtml<&'static str> {
     "#)
 }
 
+#[post("/tasks", format = "application/json", data = "<tasks>")]
+fn save_tasks(tasks: &str) {
+    dbg!(tasks);
+
+}
+
+
 
 #[launch]
 fn build() -> rocket::Rocket<rocket::Build> {
     rocket::build()
-        .mount("/", routes![index])
+        .mount("/", routes![index, save_tasks])
         .mount("/public", FileServer::from("./static"))
 }

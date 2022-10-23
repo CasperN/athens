@@ -1,3 +1,5 @@
+#![feature(async_closure)]
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlTextAreaElement;
 use yew::prelude::*;
@@ -73,6 +75,7 @@ struct List {
     dragged_over: Option<usize>,
 }
 
+#[derive(Serialize, Deserialize)]
 struct EntryData(String);
 
 #[derive(Clone)]
@@ -82,6 +85,8 @@ enum ListM {
     SetDraggedOver(Option<usize>),
     Dropped,
     SetEntryText(usize, String),
+    StartSaving,
+    SaveResult,
 }
 
 impl List {
@@ -92,6 +97,12 @@ impl List {
 
         let entry = self.entries.remove(from);
         self.entries.insert(to, entry);
+    }
+
+    fn save_request(&self) -> gloo_net::http::Request {
+        gloo_net::http::Request::post("/tasks")
+            .json(&self.entries)
+            .expect("Failed to make request")
     }
 }
 
@@ -106,7 +117,7 @@ impl Component for List {
             dragged_over: None,
         }
     }
-    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             ListM::AddEntry => {
                 let e = format!("entry: {:?}", self.entries.len());
@@ -141,23 +152,26 @@ impl Component for List {
                 self.entries[i].0 = text;
                 true
             }
+            ListM::StartSaving => {
+                let rq = self.save_request();
+                ctx.link().send_future(async {
+                    let rp = rq.send().await;
+                    log::info!("Response: {:?}", rp);
+                    ListM::SaveResult
+                });
+                false
+            }
+            ListM::SaveResult => false,
         }
     }
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let addentry = ctx.link().callback(|_| ListM::AddEntry);
         let entries: Vec<_> = self
             .entries
             .iter()
             .enumerate()
             .map(|(i, entry)| {
-                let set_dragged = |d| {
-                    ctx.link()
-                        .callback(move |_event: DragEvent| ListM::SetDragged(d))
-                };
-                let set_dragged_over = |d| {
-                    ctx.link()
-                        .callback(move |_event: DragEvent| ListM::SetDraggedOver(d))
-                };
+                let set_dragged = |d| ctx.link().callback(move |_| ListM::SetDragged(d));
+                let set_dragged_over = |d| ctx.link().callback(move |_| ListM::SetDraggedOver(d));
                 let drop = ctx.link().callback(|_e: DragEvent| ListM::Dropped);
                 let set_entry_cb = ctx.link().callback(move |s| ListM::SetEntryText(i, s));
 
@@ -181,12 +195,15 @@ impl Component for List {
                 }
             })
             .collect();
+
+        let addentry = ctx.link().callback(|_| ListM::AddEntry);
+        let save = ctx.link().callback(|_| ListM::StartSaving);
+
         html! {
             <div>
-            <ul>
-                { for entries }
-            </ul>
+            <ul>{ for entries }</ul>
             <button onclick={addentry}>{"Add"}</button>
+            <button onclick={save}>{"Save"}</button>
             </div>
         }
     }
