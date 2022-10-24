@@ -1,0 +1,15 @@
+* {
+    font-family: "Helvetica";
+    color: MediumPurple;
+}
+
+body {
+    background-color: black;
+}
+
+input {
+    background-color: navy;
+}
+button {
+    background-color: blue;
+}
