@@ -1,4 +1,5 @@
 #![feature(async_closure)]
+use gloo_net::http::Request;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlTextAreaElement;
@@ -75,18 +76,20 @@ struct List {
     dragged_over: Option<usize>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 struct EntryData(String);
 
 #[derive(Clone)]
 enum ListM {
     AddEntry,
+    LoadData(Vec<EntryData>),
     SetDragged(Option<usize>),
     SetDraggedOver(Option<usize>),
     Dropped,
     SetEntryText(usize, String),
     StartSaving,
     SaveResult,
+    Ignore, // Do thing, basically means "None"
 }
 
 impl List {
@@ -99,18 +102,36 @@ impl List {
         self.entries.insert(to, entry);
     }
 
-    fn save_request(&self) -> gloo_net::http::Request {
-        gloo_net::http::Request::post("/tasks")
+    fn save_request(&self) -> Request {
+        Request::post("/tasks")
             .json(&self.entries)
             .expect("Failed to make request")
     }
+}
+
+async fn load_tasks() -> Option<Vec<EntryData>> {
+    Request::get("/tasks")
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?
 }
 
 impl Component for List {
     type Message = ListM;
     type Properties = ();
 
-    fn create(_ctx: &Context<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
+        ctx.link().send_future(async {
+            if let Some(tasks) = load_tasks().await {
+                ListM::LoadData(tasks)
+            } else {
+                ListM::Ignore
+            }
+        });
+
         Self {
             entries: vec![],
             dragged: None,
@@ -119,6 +140,7 @@ impl Component for List {
     }
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
+            ListM::Ignore => false,
             ListM::AddEntry => {
                 let e = format!("entry: {:?}", self.entries.len());
                 self.entries.push(EntryData(e));
@@ -162,6 +184,10 @@ impl Component for List {
                 false
             }
             ListM::SaveResult => false,
+            ListM::LoadData(entries) => {
+                self.entries = entries;
+                true
+            }
         }
     }
     fn view(&self, ctx: &Context<Self>) -> Html {
