@@ -71,6 +71,7 @@ impl Component for Entry {
 }
 
 struct List {
+    // NOTE: A doubly linked list would be more efficient for random insert/remove
     entries: Vec<EntryData>,
     dragged: Option<usize>,
     dragged_over: Option<usize>,
@@ -81,14 +82,16 @@ struct EntryData(String);
 
 #[derive(Clone)]
 enum ListM {
+    // Entry CRUD
     AddEntry,
-    LoadData(Vec<EntryData>),
+    SetEntryText(usize, String),
+    // Drag and drop.
     SetDragged(Option<usize>),
     SetDraggedOver(Option<usize>),
     Dropped,
-    SetEntryText(usize, String),
+    // Saving.
     StartSaving,
-    SaveResult,
+    LoadData(Vec<EntryData>),
     Ignore, // Do thing, basically means "None"
 }
 
@@ -142,8 +145,7 @@ impl Component for List {
         match msg {
             ListM::Ignore => false,
             ListM::AddEntry => {
-                let e = format!("entry: {:?}", self.entries.len());
-                self.entries.push(EntryData(e));
+                self.entries.push(EntryData(String::new()));
                 true
             }
             ListM::SetDragged(i) => {
@@ -179,11 +181,10 @@ impl Component for List {
                 ctx.link().send_future(async {
                     let rp = rq.send().await;
                     log::info!("Response: {:?}", rp);
-                    ListM::SaveResult
+                    ListM::Ignore
                 });
                 false
             }
-            ListM::SaveResult => false,
             ListM::LoadData(entries) => {
                 self.entries = entries;
                 true
@@ -198,7 +199,7 @@ impl Component for List {
             .map(|(i, entry)| {
                 let set_dragged = |d| ctx.link().callback(move |_| ListM::SetDragged(d));
                 let set_dragged_over = |d| ctx.link().callback(move |_| ListM::SetDraggedOver(d));
-                let drop = ctx.link().callback(|_e: DragEvent| ListM::Dropped);
+                let drop = ctx.link().callback(|_| ListM::Dropped);
                 let set_entry_cb = ctx.link().callback(move |s| ListM::SetEntryText(i, s));
 
                 html! {
@@ -227,9 +228,9 @@ impl Component for List {
 
         html! {
             <div>
-            <ul>{ for entries }</ul>
-            <button onclick={addentry}>{"Add"}</button>
-            <button onclick={save}>{"Save"}</button>
+                <ul>{ for entries }</ul>
+                <button onclick={addentry}>{"Add"}</button>
+                <button onclick={save}>{"Save"}</button>
             </div>
         }
     }
@@ -240,9 +241,7 @@ fn app() -> Html {
     html! {
         <>
         <link href="public/style.css" rel="stylesheet"/>
-        <h1>
-        { "Lists!" }
-        </h1>
+        <h1>{"Lists!"}</h1>
         <List/>
         </>
     }
