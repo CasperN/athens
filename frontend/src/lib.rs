@@ -1,9 +1,12 @@
 #![feature(async_closure)]
 use gloo_net::http::Request;
-use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlTextAreaElement;
 use yew::prelude::*;
+
+
+mod model;
+use model::Model;
 
 struct Entry {
     editing: bool,
@@ -70,15 +73,12 @@ impl Component for Entry {
     }
 }
 
+#[derive(Default)]
 struct List {
-    // NOTE: A doubly linked list would be more efficient for random insert/remove
-    entries: Vec<EntryData>,
+    model: Model,
     dragged: Option<usize>,
     dragged_over: Option<usize>,
 }
-
-#[derive(Serialize, Deserialize, Clone)]
-struct EntryData(String);
 
 #[derive(Clone)]
 enum ListM {
@@ -91,28 +91,19 @@ enum ListM {
     Dropped,
     // Saving.
     StartSaving,
-    LoadData(Vec<EntryData>),
+    LoadData(Model),
     Ignore, // Do thing, basically means "None"
 }
 
 impl List {
-    fn move_entries(&mut self, from: usize, to: usize) {
-        if from == to {
-            return;
-        }
-
-        let entry = self.entries.remove(from);
-        self.entries.insert(to, entry);
-    }
-
     fn save_request(&self) -> Request {
         Request::post("/tasks")
-            .json(&self.entries)
+            .json(&self.model)
             .expect("Failed to make request")
     }
 }
 
-async fn load_tasks() -> Option<Vec<EntryData>> {
+async fn load_tasks() -> Option<Model> {
     Request::get("/tasks")
         .send()
         .await
@@ -134,18 +125,13 @@ impl Component for List {
                 ListM::Ignore
             }
         });
-
-        Self {
-            entries: vec![],
-            dragged: None,
-            dragged_over: None,
-        }
+        Self::default()
     }
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             ListM::Ignore => false,
             ListM::AddEntry => {
-                self.entries.push(EntryData(String::new()));
+                self.model.add_entry();
                 true
             }
             ListM::SetDragged(i) => {
@@ -158,7 +144,7 @@ impl Component for List {
             }
             ListM::Dropped => {
                 if let (Some(from), Some(to)) = (self.dragged, self.dragged_over) {
-                    self.move_entries(from, to);
+                    self.model.move_entries(from, to);
                     self.dragged = Some(from);
                     true
                 } else {
@@ -173,7 +159,7 @@ impl Component for List {
                 }
             }
             ListM::SetEntryText(i, text) => {
-                self.entries[i].0 = text;
+                self.model.set_text(i, text);
                 true
             }
             ListM::StartSaving => {
@@ -185,37 +171,37 @@ impl Component for List {
                 });
                 false
             }
-            ListM::LoadData(entries) => {
-                self.entries = entries;
+            ListM::LoadData(model) => {
+                self.model = model;
                 true
             }
         }
     }
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let entries: Vec<_> = self
-            .entries
-            .iter()
-            .enumerate()
-            .map(|(i, entry)| {
+        let entries: Vec<Html> = self
+            .model
+            .iter_entries()
+            .into_iter()
+            .map(|(order, id, entry)| {
                 let set_dragged = |d| ctx.link().callback(move |_| ListM::SetDragged(d));
                 let set_dragged_over = |d| ctx.link().callback(move |_| ListM::SetDraggedOver(d));
                 let drop = ctx.link().callback(|_| ListM::Dropped);
-                let set_entry_cb = ctx.link().callback(move |s| ListM::SetEntryText(i, s));
+                let set_entry_cb = ctx.link().callback(move |s| ListM::SetEntryText(id, s));
 
                 html! {
                     <li draggable="true"
-                        ondragstart={set_dragged(Some(i))}
+                        ondragstart={set_dragged(Some(order))}
                         ondragend={set_dragged(None)}
                         ondragover={ctx.link().callback(move |e: DragEvent| {
                             e.prevent_default();  // Neccessary for ondrop to be called.
-                            ListM::SetDraggedOver(Some(i))
+                            ListM::SetDraggedOver(Some(order))
                         })}
                         ondragleave={set_dragged_over(None)}
                         ondrop={drop}
                     >
                         <Entry
-                            id={i}
-                            text={entry.0.clone()}
+                            id={id}
+                            text={entry.clone()}
                             set_text={set_entry_cb}
                         />
                     </li>
