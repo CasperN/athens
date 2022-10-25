@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Clone)]
 struct EntryData(String);
 
-
 pub struct Entry {
     pub id: usize,
     pub order: usize,
@@ -53,15 +52,57 @@ impl Model {
         self.importance
             .iter()
             .enumerate()
-            .map(|(order, &id)| Entry {id, order, text:self.entries[id].0.clone() })
+            .map(|(order, &id)| Entry {
+                id,
+                order,
+                text: self.entries[id].0.clone(),
+            })
             .collect()
     }
     pub fn iter_easiness(&self) -> Vec<Entry> {
         self.easiness
             .iter()
             .enumerate()
-            .map(|(order, &id)| Entry {id, order, text:self.entries[id].0.clone() })
+            .map(|(order, &id)| Entry {
+                id,
+                order,
+                text: self.entries[id].0.clone(),
+            })
             .collect()
     }
 
+    pub fn iter_important_and_easy(&self) -> Vec<Entry> {
+        #[derive(PartialOrd, Ord, Default, Eq, PartialEq)]
+        struct Ordering {
+            importance_plus_easiness: usize,
+            importance: usize,
+            easiness: usize,
+            id: usize,
+        }
+        let mut ords = vec![];
+        for id in 0..self.entries.len() {
+            ords.push(Ordering {
+                id,
+                ..Default::default()
+            });
+        }
+        for (importance, &id) in self.importance.iter().enumerate() {
+            ords[id].importance = importance;
+        }
+        for (easiness, &id) in self.easiness.iter().enumerate() {
+            ords[id].easiness = easiness;
+        }
+        for ord in ords.iter_mut() {
+            ord.importance_plus_easiness = ord.importance + ord.easiness;
+        }
+        ords.sort();
+        ords.iter()
+            .enumerate()
+            .map(|(order, o)| Entry {
+                id: o.id,
+                order,
+                text: self.entries[o.id].0.clone(),
+            })
+            .collect()
+    }
 }

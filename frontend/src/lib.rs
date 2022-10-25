@@ -4,7 +4,6 @@ use wasm_bindgen::prelude::*;
 use web_sys::HtmlTextAreaElement;
 use yew::prelude::*;
 
-
 mod model;
 use model::Model;
 
@@ -78,7 +77,19 @@ struct List {
     model: Model,
     dragged: Option<usize>,
     dragged_over: Option<usize>,
-    sort_by_importance: bool,
+    ordering: Ordering,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Ordering {
+    Easiness,
+    Importance,
+    ImportantAndEasy,
+}
+impl Default for Ordering {
+    fn default() -> Self {
+        Ordering::Importance
+    }
 }
 
 #[derive(Clone)]
@@ -94,10 +105,9 @@ enum ListM {
     StartSaving,
     LoadData(Model),
     // Sorting
-    ToggleSort,
+    SetOrdering(Ordering),
     // Null
     Ignore,
-
 }
 
 impl List {
@@ -149,11 +159,12 @@ impl Component for List {
             }
             ListM::Dropped => {
                 if let (Some(from), Some(to)) = (self.dragged, self.dragged_over) {
-                    if self.sort_by_importance {
-                        self.model.move_importance(from, to);
-                    } else {
-                        self.model.move_easiness(from, to);
-                    }
+                    match self.ordering {
+                        Ordering::Importance => self.model.move_importance(from, to),
+                        Ordering::Easiness => self.model.move_easiness(from, to),
+                        _ => log::error!("Tried to drag and drop when ordering is {:?}",
+                                         self.ordering),
+                    };
                     self.dragged = Some(from);
                     true
                 } else {
@@ -180,8 +191,8 @@ impl Component for List {
                 });
                 false
             }
-            ListM::ToggleSort => {
-                self.sort_by_importance = !self.sort_by_importance;
+            ListM::SetOrdering(o) => {
+                self.ordering = o;
                 true
             }
             ListM::LoadData(model) => {
@@ -191,10 +202,11 @@ impl Component for List {
         }
     }
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let entries = if self.sort_by_importance {
-            self.model.iter_importance()
-        } else {
-            self.model.iter_easiness()
+        use Ordering::*;
+        let entries = match self.ordering {
+            Importance => self.model.iter_importance(),
+            Easiness => self.model.iter_easiness(),
+            ImportantAndEasy => self.model.iter_important_and_easy(),
         };
         let entries_html: Vec<Html> = entries
             .into_iter()
@@ -203,9 +215,14 @@ impl Component for List {
                 let set_dragged_over = |d| ctx.link().callback(move |_| ListM::SetDraggedOver(d));
                 let drop = ctx.link().callback(|_| ListM::Dropped);
                 let set_entry_cb = ctx.link().callback(move |s| ListM::SetEntryText(id, s));
+                let draggable = if self.ordering == Ordering::ImportantAndEasy {
+                    "false"
+                } else {
+                    "true"
+                };
 
                 html! {
-                    <li draggable="true"
+                    <li draggable={draggable}
                         ondragstart={set_dragged(Some(order))}
                         ondragend={set_dragged(None)}
                         ondragover={ctx.link().callback(move |e: DragEvent| {
@@ -228,16 +245,24 @@ impl Component for List {
         let addentry = ctx.link().callback(|_| ListM::AddEntry);
         let save = ctx.link().callback(|_| ListM::StartSaving);
 
-        let sortby = if self.sort_by_importance {
-            "Sorted by importance"
-        } else {
-            "Sorted by easiness"
+
+        let sort_msg = match self.ordering {
+            Importance => "Sorted by importance",
+            Easiness => "Sorted by easiness",
+            ImportantAndEasy => "Sorted by important and easy",
         };
-        let toggle_sort = ctx.link().callback(|_| ListM::ToggleSort);
+        let toggle_sort = {
+            let next = match self.ordering {
+                Importance => Easiness,
+                Easiness => ImportantAndEasy,
+                ImportantAndEasy => Importance,
+            };
+            ctx.link().callback(move |_| ListM::SetOrdering(next))
+        };
 
         html! {
             <div>
-                <button onclick={toggle_sort}>{sortby}</button>
+                <button onclick={toggle_sort}>{sort_msg}</button>
                 <ul>{ for entries_html }</ul>
                 <button onclick={addentry}>{"Add"}</button>
                 <button onclick={save}>{"Save"}</button>
