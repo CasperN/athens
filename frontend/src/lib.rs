@@ -3,6 +3,7 @@ use gloo_net::http::Request;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlTextAreaElement;
 use yew::prelude::*;
+use yew::virtual_dom::AttrValue;
 
 mod model;
 use model::Model;
@@ -20,7 +21,7 @@ enum EntryM {
 #[derive(PartialEq, Properties)]
 struct EntryP {
     id: usize,
-    text: String, // Should this just be shared?
+    text: AttrValue,
     set_text: Callback<String>,
 }
 impl Component for Entry {
