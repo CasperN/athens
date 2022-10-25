@@ -73,6 +73,51 @@ impl Component for Entry {
     }
 }
 
+#[derive(PartialEq, Properties)]
+struct DraggableEntryP {
+    callback: Callback<ListM>,
+    id: usize,
+    order: usize,
+    text: AttrValue,
+    draggable: bool,
+}
+#[function_component(DraggableEntry)]
+fn draggable_entry(props: &DraggableEntryP) -> Html {
+    // Communicate drag and drop to enclosing List
+    let draggable = if props.draggable { "true" } else { "false" };
+    let set_dragged = |d| props.callback.reform(move |_| ListM::SetDragged(d));
+    let set_dragged_over = |d| props.callback.reform(move |_| ListM::SetDraggedOver(d));
+    let drop = props.callback.reform(|_| ListM::Dropped);
+    let ondragover = {
+        let order = props.order;
+        props.callback.reform(move |e: DragEvent| {
+            e.prevent_default(); // Neccessary for ondrop to be called.
+            ListM::SetDraggedOver(Some(order))
+        })
+    };
+    // Pass down a callback to modify the entry text.
+    let set_entry_cb = {
+        let id = props.id;
+        props.callback.reform(move |s| ListM::SetEntryText(id, s))
+    };
+
+    html! {
+        <li draggable={draggable}
+            ondragstart={set_dragged(Some(props.order))}
+            ondragend={set_dragged(None)}
+            ondragover={ondragover}
+            ondragleave={set_dragged_over(None)}
+            ondrop={drop}
+        >
+            <Entry
+                id={props.id}
+                text={props.text.clone()}
+                set_text={set_entry_cb}
+            />
+        </li>
+    }
+}
+
 #[derive(Default)]
 struct List {
     model: Model,
@@ -214,33 +259,13 @@ impl Component for List {
         let entries_html: Vec<Html> = entries
             .into_iter()
             .map(|model::Entry { id, order, text }| {
-                let set_dragged = |d| ctx.link().callback(move |_| ListM::SetDragged(d));
-                let set_dragged_over = |d| ctx.link().callback(move |_| ListM::SetDraggedOver(d));
-                let drop = ctx.link().callback(|_| ListM::Dropped);
-                let set_entry_cb = ctx.link().callback(move |s| ListM::SetEntryText(id, s));
-                let draggable = if self.ordering == Ordering::ImportantAndEasy {
-                    "false"
-                } else {
-                    "true"
-                };
-
+                let draggable = self.ordering != Ordering::ImportantAndEasy;
                 html! {
-                    <li draggable={draggable}
-                        ondragstart={set_dragged(Some(order))}
-                        ondragend={set_dragged(None)}
-                        ondragover={ctx.link().callback(move |e: DragEvent| {
-                            e.prevent_default();  // Neccessary for ondrop to be called.
-                            ListM::SetDraggedOver(Some(order))
-                        })}
-                        ondragleave={set_dragged_over(None)}
-                        ondrop={drop}
-                    >
-                        <Entry
-                            id={id}
-                            text={text}
-                            set_text={set_entry_cb}
-                        />
-                    </li>
+                    <DraggableEntry
+                        callback={ctx.link().callback(|x| x)}
+                        draggable={draggable}
+                        id={id} order={order} text={text}
+                    />
                 }
             })
             .collect();
@@ -272,7 +297,6 @@ impl Component for List {
         }
     }
 }
-
 #[function_component(App)]
 fn app() -> Html {
     html! {
