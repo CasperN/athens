@@ -78,6 +78,7 @@ struct List {
     model: Model,
     dragged: Option<usize>,
     dragged_over: Option<usize>,
+    sort_by_importance: bool,
 }
 
 #[derive(Clone)]
@@ -92,7 +93,11 @@ enum ListM {
     // Saving.
     StartSaving,
     LoadData(Model),
-    Ignore, // Do thing, basically means "None"
+    // Sorting
+    ToggleSort,
+    // Null
+    Ignore,
+
 }
 
 impl List {
@@ -144,7 +149,11 @@ impl Component for List {
             }
             ListM::Dropped => {
                 if let (Some(from), Some(to)) = (self.dragged, self.dragged_over) {
-                    self.model.move_entries(from, to);
+                    if self.sort_by_importance {
+                        self.model.move_importance(from, to);
+                    } else {
+                        self.model.move_easiness(from, to);
+                    }
                     self.dragged = Some(from);
                     true
                 } else {
@@ -171,6 +180,10 @@ impl Component for List {
                 });
                 false
             }
+            ListM::ToggleSort => {
+                self.sort_by_importance = !self.sort_by_importance;
+                true
+            }
             ListM::LoadData(model) => {
                 self.model = model;
                 true
@@ -178,9 +191,12 @@ impl Component for List {
         }
     }
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let entries: Vec<Html> = self
-            .model
-            .iter_entries()
+        let entries = if self.sort_by_importance {
+            self.model.iter_importance()
+        } else {
+            self.model.iter_easiness()
+        };
+        let entries_html: Vec<Html> = entries
             .into_iter()
             .map(|(order, id, entry)| {
                 let set_dragged = |d| ctx.link().callback(move |_| ListM::SetDragged(d));
@@ -212,9 +228,17 @@ impl Component for List {
         let addentry = ctx.link().callback(|_| ListM::AddEntry);
         let save = ctx.link().callback(|_| ListM::StartSaving);
 
+        let sortby = if self.sort_by_importance {
+            "Sorted by importance"
+        } else {
+            "Sorted by easiness"
+        };
+        let toggle_sort = ctx.link().callback(|_| ListM::ToggleSort);
+
         html! {
             <div>
-                <ul>{ for entries }</ul>
+                <button onclick={toggle_sort}>{sortby}</button>
+                <ul>{ for entries_html }</ul>
                 <button onclick={addentry}>{"Add"}</button>
                 <button onclick={save}>{"Save"}</button>
             </div>
