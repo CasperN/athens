@@ -10,7 +10,7 @@ use std::sync::Mutex;
 // TODO: use a persistent database or something.
 type Data = Arc<Mutex<String>>;
 
-const STORAGE: &'static str = &"data.txt";
+const STORAGE: &str = "data.txt";
 
 #[get("/")]
 fn index() -> RawHtml<&'static str> {

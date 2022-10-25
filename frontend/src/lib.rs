@@ -162,8 +162,10 @@ impl Component for List {
                     match self.ordering {
                         Ordering::Importance => self.model.move_importance(from, to),
                         Ordering::Easiness => self.model.move_easiness(from, to),
-                        _ => log::error!("Tried to drag and drop when ordering is {:?}",
-                                         self.ordering),
+                        _ => log::error!(
+                            "Tried to drag and drop when ordering is {:?}",
+                            self.ordering
+                        ),
                     };
                     self.dragged = Some(from);
                     true
@@ -244,7 +246,6 @@ impl Component for List {
 
         let addentry = ctx.link().callback(|_| ListM::AddEntry);
         let save = ctx.link().callback(|_| ListM::StartSaving);
-
 
         let sort_msg = match self.ordering {
             Importance => "Sorted by importance",
