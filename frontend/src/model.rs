@@ -3,6 +3,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Clone)]
 struct EntryData(String);
 
+
+pub struct Entry {
+    pub id: usize,
+    pub order: usize,
+    pub text: String,
+}
+
 #[derive(Default, Serialize, Deserialize, Clone)]
 pub struct Model {
     entries: Vec<EntryData>,
@@ -42,18 +49,18 @@ impl Model {
     }
     // TODO: Yield a real type with names
     // TODO: Should this output a reference?
-    pub fn iter_importance(&self) -> Vec<(usize, usize, String)> {
+    pub fn iter_importance(&self) -> Vec<Entry> {
         self.importance
             .iter()
             .enumerate()
-            .map(|(order, &id)| (order, id, self.entries[id].0.clone()))
+            .map(|(order, &id)| Entry {id, order, text:self.entries[id].0.clone() })
             .collect()
     }
-    pub fn iter_easiness(&self) -> Vec<(usize, usize, String)> {
+    pub fn iter_easiness(&self) -> Vec<Entry> {
         self.easiness
             .iter()
             .enumerate()
-            .map(|(order, &id)| (order, id, self.entries[id].0.clone()))
+            .map(|(order, &id)| Entry {id, order, text:self.entries[id].0.clone() })
             .collect()
     }
 

@@ -198,7 +198,7 @@ impl Component for List {
         };
         let entries_html: Vec<Html> = entries
             .into_iter()
-            .map(|(order, id, entry)| {
+            .map(|model::Entry { id, order, text }| {
                 let set_dragged = |d| ctx.link().callback(move |_| ListM::SetDragged(d));
                 let set_dragged_over = |d| ctx.link().callback(move |_| ListM::SetDraggedOver(d));
                 let drop = ctx.link().callback(|_| ListM::Dropped);
@@ -217,7 +217,7 @@ impl Component for List {
                     >
                         <Entry
                             id={id}
-                            text={entry.clone()}
+                            text={text}
                             set_text={set_entry_cb}
                         />
                     </li>
