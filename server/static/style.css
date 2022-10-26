@@ -1,6 +1,7 @@
 * {
     font-family: "monaco";
     color: MediumPurple;
+    z-index: 0
 }
 
 body {
@@ -12,4 +13,29 @@ input {
 }
 button {
     background-color: blue;
+}
+
+.dropdown {
+    display: inline-block
+    position: relative;
+}
+.dropdown-content {
+    display: none;
+    z-index: 1
+}
+.dropdown:hover .dropdown-content {
+    display: inline-block;
+    position: absolute;
+    min-width: 160px
+    z-index: 1
+}
+.dropdown-content button {
+    display: inline-block;
+    background-color: darkslateblue;
+    color: darkgray;
+}
+.dropdown-content button:hover {
+    background-color: darkgray;
+    color: darkslateblue;
+    z-index: 1
 }

@@ -289,6 +289,7 @@ impl Component for List {
 
         html! {
             <div>
+                <UserDropdown/>
                 <button onclick={toggle_sort}>{sort_msg}</button>
                 <ul>{ for entries_html }</ul>
                 <button onclick={addentry}>{"Add"}</button>
@@ -297,6 +298,23 @@ impl Component for List {
         }
     }
 }
+
+
+#[function_component(UserDropdown)]
+fn user_dropdown() -> Html {
+    let users = (0..3u32).map(|i| html! {
+        <button>{format!("user{:?}", i)}</button>
+    });
+    html! {
+        <div class="dropdown">
+            <button>{"Change user"}</button>
+            <div class="dropdown-content">
+                { for users }
+            </div>
+        </div>
+    }
+}
+
 #[function_component(App)]
 fn app() -> Html {
     html! {
