@@ -118,6 +118,74 @@ fn draggable_entry(props: &DraggableEntryP) -> Html {
     }
 }
 
+#[derive(Default, PartialEq)]
+struct UserSelect {
+    // TODO: Something more efficient
+    active: usize,
+    users: Vec<String>,
+}
+#[derive(Debug, Clone, Copy)]
+struct UserId(usize);
+impl UserSelect {
+    fn set_active(&mut self, user_id: UserId) {
+        if user_id.0 >= self.users.len() {
+            log::error!("user_id {:?} out of range", user_id.0);
+            return;
+        }
+        self.active = user_id.0;
+    }
+    // Returns the UserId if this is a new user name.
+    fn add_user(&mut self, name: String) -> Option<UserId> {
+        if self.users.contains(&name) {
+            return None;
+        }
+        let id = UserId(self.users.len());
+        self.users.push(name);
+        Some(id)
+    }
+}
+enum UserSelectM {
+    SetActive(UserId),
+    AddUser(String),
+}
+impl Component for UserSelect {
+    type Properties = ();
+    type Message = UserSelectM;
+    fn create(_ctx: &Context<Self>) -> Self {
+        Default::default()
+    }
+    fn update(&mut self, _ctx: &Context<Self>, msg: UserSelectM) -> bool {
+        use UserSelectM::*;
+        match msg {
+            SetActive(i) => {
+                self.set_active(i);
+                true
+            }
+            AddUser(u) => {
+                self.add_user(u).expect("Did not handle duplicate users");
+                true
+            }
+        }
+    }
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let users = self.users.iter().map(|i| {
+            html! {
+                <button>{format!("user: {:?}", i)}</button>
+            }
+        });
+        use UserSelectM::*;
+        let onclick = ctx.link().callback(|_| AddUser("foo".to_string()));
+        html! {
+            <div class="dropdown">
+                <button onclick={onclick}>{"AddUser"}</button>
+                <div class="dropdown-content">
+                    { for users }
+                </div>
+            </div>
+        }
+    }
+}
+
 #[derive(Default)]
 struct List {
     model: Model,
@@ -289,7 +357,7 @@ impl Component for List {
 
         html! {
             <div>
-                <UserDropdown/>
+                <UserSelect/>
                 <button onclick={toggle_sort}>{sort_msg}</button>
                 <ul>{ for entries_html }</ul>
                 <button onclick={addentry}>{"Add"}</button>
@@ -299,21 +367,21 @@ impl Component for List {
     }
 }
 
-
-#[function_component(UserDropdown)]
-fn user_dropdown() -> Html {
-    let users = (0..3u32).map(|i| html! {
-        <button>{format!("user{:?}", i)}</button>
-    });
-    html! {
-        <div class="dropdown">
-            <button>{"Change user"}</button>
-            <div class="dropdown-content">
-                { for users }
-            </div>
-        </div>
-    }
-}
+//
+// #[function_component(UserDropdown)]
+// fn user_dropdown() -> Html {
+//     let users = (0..3u32).map(|i| html! {
+//         <button>{format!("user{:?}", i)}</button>
+//     });
+//     html! {
+//         <div class="dropdown">
+//             <button>{"Change user"}</button>
+//             <div class="dropdown-content">
+//                 { for users }
+//             </div>
+//         </div>
+//     }
+// }
 
 #[function_component(App)]
 fn app() -> Html {
