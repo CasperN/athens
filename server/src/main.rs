@@ -1,3 +1,5 @@
+#![feature(linked_list_cursors)]
+
 #[macro_use]
 extern crate rocket;
 
@@ -8,6 +10,33 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 // TODO: use a persistent database or something.
+
+// GET  /space/{spaceid} -> Exists or Nah
+// POST /space/{spaceid} -> Create space
+//
+// GET  /space/{spaceid}/user/{userid} -> User { alias, weight }
+// POST /space/{spaceid}/user/{userid} -> update username
+//
+// GET  /space/{spaceid}/task/{taskid} -> Task { text, lifecycle }
+// POST /space/{spaceid}/task/{taskid} -> update task
+//
+// -- If the taskid is not in the list, it is prepended in descending order
+// GET  /space/{spaceid}/importance/{userid} -> Vec<TaskId>;
+// POST /space/{spaceid}/importance/{userid} -> Vec<TaskId>;
+//
+// GET  /space/{spaceid}/blocking/{userid} -> Vec<(TaskId, TaskId)>
+// POST /space/{spaceid}/blocking/{userid} -> Vec<(TaskId, TaskId)>
+//
+// GET  /space -> list of spaces (probably not the best idea for security)
+// GET  /space/{spaceid}/task -> Vec<TaskId>
+// GET  /space/{spaceid}/importance -> Aggregated importance ordering
+// GET  /space/{spaceid}/easiness -> Aggregated easiness ordering
+// GET  /space/{spaceid}/final -> Aggregated ordering considering everything.
+
+mod model;
+
+//
+//
 type Data = Arc<Mutex<String>>;
 
 const STORAGE: &str = "data.txt";
