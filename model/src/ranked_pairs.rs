@@ -3,6 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 // TODO: Weighting.
 pub fn ranked_pairs_ordering(orderings: &[OrderedTasks]) -> OrderedTasks {
+    if orderings.is_empty() {
+        return OrderedTasks(vec![]);
+    }
     // TODO: Check that the orderings all have the same number of TaskIds.
 
     // 1. For each user make a map from TaskId to the user's task order.

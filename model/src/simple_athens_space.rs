@@ -1,6 +1,7 @@
 #![allow(unused_variables)] // TODO: Remove
 
-use super::*;
+use super::*; // TODO: explicit import
+use std::collections::BTreeMap;
 pub type ParallelSimpleAthensSpace = std::sync::Arc<std::sync::Mutex<SimpleAthensSpace>>;
 
 impl AthensSpace for ParallelSimpleAthensSpace {
@@ -17,7 +18,10 @@ impl AthensSpace for ParallelSimpleAthensSpace {
         self.lock().unwrap().easiness().0
     }
     fn important_and_easy_tasks(&self) -> Vec<TaskId> {
-        todo!()
+        let space = self.lock().unwrap();
+        let i = space.importance();
+        let e = space.easiness();
+        combine_important_and_easy(&i, &e).0
     }
     fn create_user(&self) -> User {
         self.lock().unwrap().new_user().user.clone()
@@ -31,6 +35,14 @@ impl AthensSpace for ParallelSimpleAthensSpace {
             u.user.clone()
         })
     }
+    fn get_user(&self, id: UserId) -> Option<User> {
+        // TODO: This will panic probably on unknown id
+        Some(self.lock().unwrap().user(id).user.clone())
+    }
+    fn get_task(&self, id: TaskId) -> Option<Task> {
+        Some(self.lock().unwrap().task(id).clone())
+    }
+
     fn set_task(&self, task: Task) -> Option<Task> {
         self.lock().unwrap().mut_task(task.id).map(|t| {
             *t = task;
@@ -51,6 +63,11 @@ impl AthensSpace for ParallelSimpleAthensSpace {
     fn user_easiness(&self, id: UserId) -> OrderedTasks {
         self.lock().unwrap().user(id).easiness.clone()
     }
+    fn user_important_and_easy(&self, id: UserId) -> OrderedTasks {
+        let space = self.lock().unwrap();
+        let user = space.user(id);
+        combine_important_and_easy(&user.importance, &user.easiness)
+   }
     fn set_user_importance(&self, id: UserId, o: OrderedTasks) -> Option<OrderedTasks> {
         // TODO: Verification of taskIds.
         self.lock().unwrap().mut_user(id).map(|u| {
@@ -65,18 +82,51 @@ impl AthensSpace for ParallelSimpleAthensSpace {
             u.easiness.clone()
         })
     }
+    fn swap_user_importance(&self, id: UserId, from: usize, to: usize) -> Option<OrderedTasks> {
+        let mut space = self.lock().unwrap();
+        let u = space.mut_user(id)?;
+        u.move_importance(from, to);
+        Some(u.importance.clone())
+    }
+    fn swap_user_easiness(&self, id: UserId, from: usize, to: usize) -> Option<OrderedTasks> {
+        let mut space = self.lock().unwrap();
+        let u = space.mut_user(id)?;
+        u.move_easiness(from, to);
+        Some(u.easiness.clone())
+    }
+}
+
+fn combine_important_and_easy(importance: &OrderedTasks, easiness: &OrderedTasks) -> OrderedTasks {
+    let mut ords = BTreeMap::<TaskId, (usize, usize)>::new();
+    for (ord, id) in importance.iter().enumerate() {
+        assert!(ords.insert(id, (ord, 0)).is_none());
+    }
+    for (ord, id) in easiness.iter().enumerate() {
+        ords.get_mut(&id).unwrap().1 = ord;
+    }
+    let mut ords = ords
+        .into_iter()
+        .map(|(id, (importance, easiness))| (importance + easiness, importance, id))
+        .collect::<Vec<_>>();
+    ords.sort();
+    OrderedTasks(ords.into_iter().map(|(_, _, id)| id).collect())
 }
 
 // One implementation of an AthensSpace
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct SimpleAthensSpace {
     id: SpaceId,
     alias: String,
     tasks: Vec<Task>,
     users: Vec<UserWithOrds>,
 }
+impl Default for SimpleAthensSpace {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct UserWithOrds {
     user: User,
     importance: OrderedTasks, // TODO: Setter
@@ -105,7 +155,7 @@ impl SimpleAthensSpace {
     }
     pub fn new_user(&mut self) -> &mut UserWithOrds {
         let id = UserId(self.users.len());
-        let default_order = OrderedTasks(self.tasks.iter().map(|t| t.id).collect());
+        let default_order = OrderedTasks(self.task_ids().collect());
         self.users.push(UserWithOrds {
             user: User {
                 id,
@@ -116,6 +166,9 @@ impl SimpleAthensSpace {
             easiness: default_order,
         });
         self.users.last_mut().unwrap()
+    }
+    pub fn task_ids<'a>(&'a self) -> impl Iterator<Item=TaskId> + 'a {
+        self.tasks.iter().map(|t| t.id)
     }
     pub fn user(&self, id: UserId) -> &UserWithOrds {
         &self.users[id.0]
@@ -142,6 +195,9 @@ impl SimpleAthensSpace {
         &self.tasks[id.0]
     }
     pub fn easiness(&self) -> OrderedTasks {
+        if self.users.is_empty() {
+            return OrderedTasks(self.task_ids().collect());
+        }
         let mut ords = Vec::new();
         for u in self.users.iter() {
             // TODO: Unnecessary clone.
@@ -150,6 +206,9 @@ impl SimpleAthensSpace {
         ranked_pairs_ordering(&ords)
     }
     pub fn importance(&self) -> OrderedTasks {
+        if self.users.is_empty() {
+            return OrderedTasks(self.task_ids().collect());
+        }
         let mut ords = Vec::new();
         for u in self.users.iter() {
             // TODO: Unnecessary clone.

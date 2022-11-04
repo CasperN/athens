@@ -10,57 +10,69 @@ mod simple_athens_space;
 pub use simple_athens_space::*;
 
 /// Permenant unique identifier for a user.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct UserId(usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct UserId(pub usize); // TODO: No Pub, only needed for migration because of name conflict
 
 /// Permenant unique identifier for a task.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct TaskId(usize);
+pub struct TaskId(pub usize);
 
 /// Globally unique identifier for a space of tasks and users.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct SpaceId(usize);
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct User {
-    id: UserId,
-    alias: String,
-    weight: u32,
+    pub id: UserId,
+    pub alias: String,
+    pub weight: u32,
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Task {
-    id: TaskId,
-    text: String,
+    pub id: TaskId,
+    pub text: String,
 }
 
 /// Iterate over TaskId, contains all tasks in the space.
 // TODO: A doubly linked list would be more efficient for random reordering.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+// TODO: Perhaps this shouldn't force copies?
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct OrderedTasks(Vec<TaskId>);
 
 /// Grants parallel access to an AthensSpace
+// TODO: Maybe things will be easier if it wasn't parallel.
 pub trait AthensSpace {
     // Space
     fn id(&self) -> SpaceId;
     // TODO: Get/Set space alias
-    fn tasks(&self) -> Vec<TaskId>;
+
+    fn tasks(&self) -> Vec<TaskId>; // TODO: does this make sense?
     fn important_tasks(&self) -> Vec<TaskId>;
     fn easy_tasks(&self) -> Vec<TaskId>;
     fn important_and_easy_tasks(&self) -> Vec<TaskId>;
     fn users(&self) -> Vec<UserId>;
 
-    // Modify users and tasks.
+    // Crud for users
     fn create_user(&self) -> User;
-    fn set_user(&self, user: User) -> Option<User>;
+    fn get_user(&self, user: UserId) -> Option<User>;
+    fn set_user(&self, id: User) -> Option<User>;
+
+    // Crud for tasks
     fn create_task(&self) -> Task;
+    fn get_task(&self, id: TaskId) -> Option<Task>;
     fn set_task(&self, task: Task) -> Option<Task>;
 
-    // Per user
+    // Get per user task ordering
     fn user_importance(&self, id: UserId) -> OrderedTasks;
     fn user_easiness(&self, id: UserId) -> OrderedTasks;
+    fn user_important_and_easy(&self, id: UserId) -> OrderedTasks;
+
+    // Modify user orderings
     fn set_user_importance(&self, id: UserId, ord: OrderedTasks) -> Option<OrderedTasks>;
     fn set_user_easiness(&self, id: UserId, ord: OrderedTasks) -> Option<OrderedTasks>;
+    fn swap_user_importance(&self, id: UserId, from: usize, to: usize) -> Option<OrderedTasks>;
+    fn swap_user_easiness(&self, id: UserId, from: usize, to: usize) -> Option<OrderedTasks>;
 }
 
 impl std::fmt::Debug for TaskId {
@@ -87,11 +99,15 @@ impl OrderedTasks {
         let task = self.0.remove(from);
         self.0.insert(to, task);
     }
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = TaskId> + 'a {
+        self.0.iter().map(|id| *id)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
     fn simple_athens_space(space: &dyn AthensSpace) {
         let t0 = space.create_task().id;
         let t1 = space.create_task().id;
@@ -122,8 +138,19 @@ mod tests {
     }
     #[test]
     fn test_parallel_simple_athens_space() {
-        use std::sync::{Arc, Mutex};
         let s = Arc::new(Mutex::new(SimpleAthensSpace::new()));
         simple_athens_space(&s);
+    }
+    // Test list importance with no users and no tasks
+    #[test]
+    fn test_empty_simple_athens_space() {
+        let s = Arc::new(Mutex::new(SimpleAthensSpace::new()));
+        assert_eq!(s.important_tasks(), vec![]);
+    }
+    #[test]
+    fn test_simple_athens_space_no_users() {
+        let s = Arc::new(Mutex::new(SimpleAthensSpace::new()));
+        let t0 = s.create_task().id;
+        assert_eq!(s.important_tasks(), vec![t0]);
     }
 }
