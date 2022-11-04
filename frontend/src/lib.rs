@@ -2,39 +2,69 @@
 use gloo_net::http::Request;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlTextAreaElement;
+use yew::context::ContextHandle;
 use yew::prelude::*;
-use yew::virtual_dom::AttrValue;
+// use yew::virtual_dom::AttrValue;
 
-mod model;
-use model::Model;
+use model::{AthensSpace, TaskId, UserId, SimpleAthensSpace};
+
+// TODO: Should this be Box<dyn Athens> or Rc<dyn Athens>
+// or something?
+#[derive(Clone, Default)]
+struct Athens {
+    inner: model::ParallelSimpleAthensSpace,
+}
+impl PartialEq for Athens {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+
+impl Athens {
+    fn new() -> Self {
+        Default::default()
+    }
+    fn get(&self) -> &dyn AthensSpace {
+        &self.inner
+    }
+}
 
 struct Entry {
     editing: bool,
+    athens: Athens,
+    _handle: ContextHandle<Athens>,
 }
 
 #[derive(Clone, Copy)]
 enum EntryM {
     StartEditing,
     StopEditing,
+    Ignore,
 }
 
 #[derive(PartialEq, Properties)]
 struct EntryP {
     id: usize,
-    text: AttrValue,
     set_text: Callback<String>,
 }
 impl Component for Entry {
     type Properties = EntryP;
     type Message = EntryM;
 
-    fn create(_ctx: &Context<Self>) -> Self {
-        Entry { editing: false }
+    fn create(ctx: &Context<Self>) -> Self {
+        let cb = ctx.link().callback(|_| EntryM::Ignore);
+        let (athens, _handle) = ctx.link().context::<Athens>(cb).unwrap();
+        Entry {
+            athens,
+            _handle,
+            editing: false,
+        }
     }
     fn update(&mut self, _ctx: &Context<Self>, msg: EntryM) -> bool {
         match msg {
             EntryM::StartEditing => self.editing = true,
             EntryM::StopEditing => self.editing = false,
+            EntryM::Ignore => (),
         };
         true
     }
@@ -57,6 +87,12 @@ impl Component for Entry {
                 set_text.emit(t.value())
             })
         };
+        let value = self
+            .athens
+            .get()
+            .get_task(TaskId(ctx.props().id))
+            .unwrap()
+            .text;
 
         html! {
             <input
@@ -65,7 +101,7 @@ impl Component for Entry {
                 disabled={!self.editing}
                 onclick={start_editing}
                 onfocusout={stop_editing}
-                value={ctx.props().text.clone()}
+                value={value}
                 onkeypress={stop_editing_on_enter}
                 oninput={emit_text}
             />
@@ -76,10 +112,9 @@ impl Component for Entry {
 #[derive(PartialEq, Properties)]
 struct DraggableEntryP {
     callback: Callback<ListM>,
-    id: usize,
-    order: usize,
-    text: AttrValue,
     draggable: bool,
+    order: usize,
+    children: Children,
 }
 #[function_component(DraggableEntry)]
 fn draggable_entry(props: &DraggableEntryP) -> Html {
@@ -95,12 +130,6 @@ fn draggable_entry(props: &DraggableEntryP) -> Html {
             ListM::SetDraggedOver(Some(order))
         })
     };
-    // Pass down a callback to modify the entry text.
-    let set_entry_cb = {
-        let id = props.id;
-        props.callback.reform(move |s| ListM::SetEntryText(id, s))
-    };
-
     html! {
         <li draggable={draggable}
             ondragstart={set_dragged(Some(props.order))}
@@ -109,23 +138,17 @@ fn draggable_entry(props: &DraggableEntryP) -> Html {
             ondragleave={set_dragged_over(None)}
             ondrop={drop}
         >
-            <Entry
-                id={props.id}
-                text={props.text.clone()}
-                set_text={set_entry_cb}
-            />
+        { for props.children.iter() }
         </li>
     }
 }
 
 #[derive(Default, PartialEq)]
 struct UserSelect {
-    // TODO: Something more efficient
+    // TODO: Hook into AthensSpace
     active: usize,
     users: Vec<String>,
 }
-#[derive(Debug, Clone, Copy)]
-struct UserId(usize);
 impl UserSelect {
     fn set_active(&mut self, user_id: UserId) {
         if user_id.0 >= self.users.len() {
@@ -186,12 +209,13 @@ impl Component for UserSelect {
     }
 }
 
-#[derive(Default)]
 struct List {
-    model: Model,
     dragged: Option<usize>,
     dragged_over: Option<usize>,
     ordering: Ordering,
+    athens: Athens,
+    _handle: ContextHandle<Athens>,
+    selected_user: UserId,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -217,7 +241,7 @@ enum ListM {
     Dropped,
     // Saving.
     StartSaving,
-    LoadData(Model),
+    LoadData(SimpleAthensSpace),
     // Sorting
     SetOrdering(Ordering),
     // Null
@@ -227,12 +251,15 @@ enum ListM {
 impl List {
     fn save_request(&self) -> Request {
         Request::post("/tasks")
-            .json(&self.model)
+            .json(&self.athens.inner.lock().unwrap().clone())
             .expect("Failed to make request")
+    }
+    fn athens(&self) -> &dyn AthensSpace {
+        self.athens.get()
     }
 }
 
-async fn load_tasks() -> Option<Model> {
+async fn load_tasks() -> Option<SimpleAthensSpace> {
     Request::get("/tasks")
         .send()
         .await
@@ -254,13 +281,32 @@ impl Component for List {
                 ListM::Ignore
             }
         });
-        Self::default()
+        let cb = ctx.link().callback(|_| ListM::Ignore);
+        let (athens, _handle) = ctx.link().context::<Athens>(cb).unwrap();
+        let user_id = {
+            let users = athens.get().users();
+            if users.is_empty() {
+                athens.get().create_user().id
+            } else {
+                users[0]
+            }
+        };
+        Self {
+            dragged: None,
+            dragged_over: None,
+            ordering: Ordering::Importance,
+            athens,
+            selected_user: user_id,
+            _handle,
+        }
     }
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             ListM::Ignore => false,
             ListM::AddEntry => {
-                self.model.add_entry();
+                log::info!("adding entry");
+                let id = self.athens().create_task().id;
+                log::info!("Created task with id: {:?}", id);
                 true
             }
             ListM::SetDragged(i) => {
@@ -274,8 +320,14 @@ impl Component for List {
             ListM::Dropped => {
                 if let (Some(from), Some(to)) = (self.dragged, self.dragged_over) {
                     match self.ordering {
-                        Ordering::Importance => self.model.move_importance(from, to),
-                        Ordering::Easiness => self.model.move_easiness(from, to),
+                        Ordering::Importance => {
+                            self.athens()
+                                .swap_user_importance(self.selected_user, from, to);
+                        }
+                        Ordering::Easiness => {
+                            self.athens()
+                                .swap_user_easiness(self.selected_user, from, to);
+                        }
                         _ => log::error!(
                             "Tried to drag and drop when ordering is {:?}",
                             self.ordering
@@ -295,7 +347,10 @@ impl Component for List {
                 }
             }
             ListM::SetEntryText(i, text) => {
-                self.model.set_text(i, text);
+                self.athens().set_task(model::Task {
+                    id: model::TaskId(i),
+                    text,
+                });
                 true
             }
             ListM::StartSaving => {
@@ -312,28 +367,33 @@ impl Component for List {
                 true
             }
             ListM::LoadData(model) => {
-                self.model = model;
+                *self.athens.inner.lock().unwrap() = model;
                 true
             }
         }
     }
     fn view(&self, ctx: &Context<Self>) -> Html {
         use Ordering::*;
-        let entries = match self.ordering {
-            Importance => self.model.iter_importance(),
-            Easiness => self.model.iter_easiness(),
-            ImportantAndEasy => self.model.iter_important_and_easy(),
+        let task_ids = match self.ordering {
+            Importance => self.athens().important_tasks(),
+            Easiness => self.athens().easy_tasks(),
+            ImportantAndEasy => self.athens().important_and_easy_tasks(),
         };
-        let entries_html: Vec<Html> = entries
+        let entries_html: Vec<Html> = task_ids
             .into_iter()
-            .map(|model::Entry { id, order, text }| {
+            .enumerate()
+            .map(|(order, TaskId(id))| {
                 let draggable = self.ordering != Ordering::ImportantAndEasy;
+                // Pass down a callback to modify the entry text.
+                let set_text = { ctx.link().callback(move |s| ListM::SetEntryText(id, s)) };
+
                 html! {
                     <DraggableEntry
                         callback={ctx.link().callback(|x| x)}
-                        draggable={draggable}
-                        id={id} order={order} text={text}
-                    />
+                        draggable={draggable} order={order}
+                    >
+                        <Entry id={id} set_text={set_text}/>
+                    </DraggableEntry>
                 }
             })
             .collect();
@@ -367,30 +427,15 @@ impl Component for List {
     }
 }
 
-//
-// #[function_component(UserDropdown)]
-// fn user_dropdown() -> Html {
-//     let users = (0..3u32).map(|i| html! {
-//         <button>{format!("user{:?}", i)}</button>
-//     });
-//     html! {
-//         <div class="dropdown">
-//             <button>{"Change user"}</button>
-//             <div class="dropdown-content">
-//                 { for users }
-//             </div>
-//         </div>
-//     }
-// }
-
 #[function_component(App)]
 fn app() -> Html {
+    let space = Athens::new();
     html! {
-        <>
+        <ContextProvider<Athens> context={space.clone()}>
         <link href="public/style.css" rel="stylesheet"/>
         <h1>{"Lists!"}</h1>
         <List/>
-        </>
+        </ContextProvider<Athens>>
     }
 }
 
