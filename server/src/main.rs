@@ -33,8 +33,6 @@ use std::sync::Mutex;
 // GET  /space/{spaceid}/easiness -> Aggregated easiness ordering
 // GET  /space/{spaceid}/final -> Aggregated ordering considering everything.
 
-mod model;
-
 //
 //
 type Data = Arc<Mutex<String>>;

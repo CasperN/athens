@@ -45,7 +45,6 @@ enum EntryM {
 #[derive(PartialEq, Properties)]
 struct EntryP {
     id: usize,
-    set_text: Callback<String>,
 }
 impl Component for Entry {
     type Properties = EntryP;
@@ -81,10 +80,11 @@ impl Component for Entry {
             })
         };
         let emit_text = {
-            let set_text = ctx.props().set_text.clone();
+            let id = TaskId(ctx.props().id);
+            let a = self.athens.inner.clone();
             Callback::from(move |e: InputEvent| {
                 let t: HtmlTextAreaElement = e.target_unchecked_into();
-                set_text.emit(t.value())
+                a.set_task(model::Task { id, text: t.value() });
             })
         };
         let value = self
@@ -121,12 +121,16 @@ fn draggable_entry(props: &DraggableEntryP) -> Html {
     // Communicate drag and drop to enclosing List
     let draggable = if props.draggable { "true" } else { "false" };
     let set_dragged = |d| props.callback.reform(move |_| ListM::SetDragged(d));
-    let set_dragged_over = |d| props.callback.reform(move |_| ListM::SetDraggedOver(d));
+    let set_dragged_over = |d| props.callback.reform(move |_| {
+        log::info!("set dragover");
+        ListM::SetDraggedOver(d)
+    });
     let drop = props.callback.reform(|_| ListM::Dropped);
     let ondragover = {
         let order = props.order;
         props.callback.reform(move |e: DragEvent| {
             e.prevent_default(); // Neccessary for ondrop to be called.
+            log::info!("on dragover!");
             ListM::SetDraggedOver(Some(order))
         })
     };
@@ -142,6 +146,7 @@ fn draggable_entry(props: &DraggableEntryP) -> Html {
         </li>
     }
 }
+
 
 #[derive(Default, PartialEq)]
 struct UserSelect {
@@ -230,11 +235,10 @@ impl Default for Ordering {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum ListM {
     // Entry CRUD
     AddEntry,
-    SetEntryText(usize, String),
     // Drag and drop.
     SetDragged(Option<usize>),
     SetDraggedOver(Option<usize>),
@@ -301,12 +305,11 @@ impl Component for List {
         }
     }
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        log::info!("List received Message: {:?}", &msg);
         match msg {
             ListM::Ignore => false,
             ListM::AddEntry => {
-                log::info!("adding entry");
                 let id = self.athens().create_task().id;
-                log::info!("Created task with id: {:?}", id);
                 true
             }
             ListM::SetDragged(i) => {
@@ -346,13 +349,6 @@ impl Component for List {
                     false
                 }
             }
-            ListM::SetEntryText(i, text) => {
-                self.athens().set_task(model::Task {
-                    id: model::TaskId(i),
-                    text,
-                });
-                true
-            }
             ListM::StartSaving => {
                 let rq = self.save_request();
                 ctx.link().send_future(async {
@@ -385,14 +381,12 @@ impl Component for List {
             .map(|(order, TaskId(id))| {
                 let draggable = self.ordering != Ordering::ImportantAndEasy;
                 // Pass down a callback to modify the entry text.
-                let set_text = { ctx.link().callback(move |s| ListM::SetEntryText(id, s)) };
-
                 html! {
                     <DraggableEntry
                         callback={ctx.link().callback(|x| x)}
                         draggable={draggable} order={order}
                     >
-                        <Entry id={id} set_text={set_text}/>
+                        <Entry id={id}/>
                     </DraggableEntry>
                 }
             })

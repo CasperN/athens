@@ -113,7 +113,7 @@ fn combine_important_and_easy(importance: &OrderedTasks, easiness: &OrderedTasks
 }
 
 // One implementation of an AthensSpace
-#[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SimpleAthensSpace {
     id: SpaceId,
     alias: String,
@@ -126,7 +126,7 @@ impl Default for SimpleAthensSpace {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct UserWithOrds {
     user: User,
     importance: OrderedTasks, // TODO: Setter
