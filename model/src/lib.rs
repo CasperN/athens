@@ -102,6 +102,9 @@ impl OrderedTasks {
     pub fn iter<'a>(&'a self) -> impl Iterator<Item = TaskId> + 'a {
         self.0.iter().map(|id| *id)
     }
+    pub fn into_iter(self) -> impl Iterator<Item = TaskId> {
+        self.0.into_iter()
+    }
 }
 
 #[cfg(test)]

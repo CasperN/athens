@@ -138,6 +138,7 @@ fn draggable_entry(props: &DraggableEntryP) -> Html {
         <li draggable={draggable}
             ondragstart={set_dragged(Some(props.order))}
             ondragend={set_dragged(None)}
+            ondragenter={ondragover.clone()}
             ondragover={ondragover}
             ondragleave={set_dragged_over(None)}
             ondrop={drop}
@@ -147,72 +148,36 @@ fn draggable_entry(props: &DraggableEntryP) -> Html {
     }
 }
 
-
-#[derive(Default, PartialEq)]
-struct UserSelect {
-    // TODO: Hook into AthensSpace
-    active: usize,
-    users: Vec<String>,
+#[derive(PartialEq, Properties)]
+struct UserSelectP {
+    active: UserId,
+    set_active: Callback<UserId>,
+    add_user: Callback<()>,
 }
-impl UserSelect {
-    fn set_active(&mut self, user_id: UserId) {
-        if user_id.0 >= self.users.len() {
-            log::error!("user_id {:?} out of range", user_id.0);
-            return;
-        }
-        self.active = user_id.0;
-    }
-    // Returns the UserId if this is a new user name.
-    fn add_user(&mut self, name: String) -> Option<UserId> {
-        if self.users.contains(&name) {
-            return None;
-        }
-        let id = UserId(self.users.len());
-        self.users.push(name);
-        Some(id)
-    }
-}
-enum UserSelectM {
-    SetActive(UserId),
-    AddUser(String),
-}
-impl Component for UserSelect {
-    type Properties = ();
-    type Message = UserSelectM;
-    fn create(_ctx: &Context<Self>) -> Self {
-        Default::default()
-    }
-    fn update(&mut self, _ctx: &Context<Self>, msg: UserSelectM) -> bool {
-        use UserSelectM::*;
-        match msg {
-            SetActive(i) => {
-                self.set_active(i);
-                true
-            }
-            AddUser(u) => {
-                self.add_user(u).expect("Did not handle duplicate users");
-                true
-            }
-        }
-    }
-    fn view(&self, ctx: &Context<Self>) -> Html {
-        let users = self.users.iter().map(|i| {
-            html! {
-                <button>{format!("user: {:?}", i)}</button>
-            }
-        });
-        use UserSelectM::*;
-        let onclick = ctx.link().callback(|_| AddUser("foo".to_string()));
+#[function_component(UserSelect)]
+fn user_select(props: &UserSelectP) -> Html {
+    let binding = use_context::<Athens>().unwrap();
+    let athens = binding.get();
+    let users = athens.users().into_iter().map(|i|{
+        let onclick = props.set_active.reform(move |_| i);
         html! {
-            <div class="dropdown">
-                <button onclick={onclick}>{"AddUser"}</button>
-                <div class="dropdown-content">
-                    { for users }
-                </div>
-            </div>
+            <button onclick={onclick}>
+                {format!("user/{}:`{}`", i.0, athens.get_user(i).unwrap().alias)}
+            </button>
         }
+    });
+
+    let onclick = props.add_user.reform(|_|());
+    html! {
+        <div class="dropdown">
+            <button onclick={onclick}>{"AddUser"}</button>
+            <div class="dropdown-content">
+                { for users }
+            </div>
+        </div>
     }
 }
+
 
 struct List {
     dragged: Option<usize>,
@@ -250,6 +215,9 @@ enum ListM {
     SetOrdering(Ordering),
     // Null
     Ignore,
+    //
+    SetActiveUser(UserId),
+    AddUser,
 }
 
 impl List {
@@ -309,7 +277,7 @@ impl Component for List {
         match msg {
             ListM::Ignore => false,
             ListM::AddEntry => {
-                let id = self.athens().create_task().id;
+                self.athens().create_task();
                 true
             }
             ListM::SetDragged(i) => {
@@ -366,20 +334,30 @@ impl Component for List {
                 *self.athens.inner.lock().unwrap() = model;
                 true
             }
+            ListM::SetActiveUser(u) => {
+                self.selected_user = u;
+                true
+            }
+            ListM::AddUser => {
+                self.athens().create_user();
+                true
+            }
         }
     }
     fn view(&self, ctx: &Context<Self>) -> Html {
         use Ordering::*;
+        // TODO: selected user should be optional and
+        // None should mean "aggregated", which are not draggable.
         let task_ids = match self.ordering {
-            Importance => self.athens().important_tasks(),
-            Easiness => self.athens().easy_tasks(),
-            ImportantAndEasy => self.athens().important_and_easy_tasks(),
+            Importance => self.athens().user_importance(self.selected_user),
+            Easiness => self.athens().user_easiness(self.selected_user),
+            ImportantAndEasy => self.athens().user_important_and_easy(self.selected_user),
         };
+        let draggable = self.ordering != Ordering::ImportantAndEasy;
         let entries_html: Vec<Html> = task_ids
             .into_iter()
             .enumerate()
             .map(|(order, TaskId(id))| {
-                let draggable = self.ordering != Ordering::ImportantAndEasy;
                 // Pass down a callback to modify the entry text.
                 html! {
                     <DraggableEntry
@@ -411,7 +389,11 @@ impl Component for List {
 
         html! {
             <div>
-                <UserSelect/>
+                <UserSelect
+                    active={self.selected_user}
+                    set_active={ctx.link().callback(|i| ListM::SetActiveUser(i))}
+                    add_user={ctx.link().callback(|_| ListM::AddUser)}
+                />
                 <button onclick={toggle_sort}>{sort_msg}</button>
                 <ul>{ for entries_html }</ul>
                 <button onclick={addentry}>{"Add"}</button>
