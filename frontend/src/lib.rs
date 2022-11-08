@@ -160,10 +160,17 @@ fn user_select(props: &UserSelectP) -> Html {
     let athens = binding.get();
     let users = athens.users().into_iter().map(|i|{
         let onclick = props.set_active.reform(move |_| i);
+        let class = if i == props.active {
+            "selected"
+        } else {
+            ""
+        };
         html! {
+            <div class={class}>
             <button onclick={onclick}>
                 {format!("user/{}:`{}`", i.0, athens.get_user(i).unwrap().alias)}
             </button>
+            </div>
         }
     });
 

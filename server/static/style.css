@@ -26,8 +26,11 @@ button {
 .dropdown:hover .dropdown-content {
     display: inline-block;
     position: absolute;
-    min-width: 160px
+    min-width: 160px;
     z-index: 1
+}
+.dropdown-content div {
+    display: inline-block;
 }
 .dropdown-content button {
     display: inline-block;
@@ -35,7 +38,19 @@ button {
     color: darkgray;
 }
 .dropdown-content button:hover {
+    display: inline-block;
     background-color: darkgray;
     color: darkslateblue;
+    z-index: 1
+}
+.dropdown-content .selected button {
+    display: inline-block;
+    background-color: midnightblue;
+    color: silver;
+}
+.dropdown-content .selected button:hover {
+    display: inline-block;
+    background-color: silver;
+    color: midnightblue;
     z-index: 1
 }
