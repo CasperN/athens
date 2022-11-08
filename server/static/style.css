@@ -16,7 +16,7 @@ button {
 }
 
 .dropdown {
-    display: inline-block
+    display: inline-block;
     position: relative;
 }
 .dropdown-content {
@@ -25,7 +25,7 @@ button {
 }
 .dropdown:hover .dropdown-content {
     display: inline-block;
-    position: absolute;
+    position: relative;
     min-width: 160px;
     z-index: 1
 }

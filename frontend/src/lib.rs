@@ -158,28 +158,32 @@ struct UserSelectP {
 fn user_select(props: &UserSelectP) -> Html {
     let binding = use_context::<Athens>().unwrap();
     let athens = binding.get();
-    let users = athens.users().into_iter().map(|i|{
-        let onclick = props.set_active.reform(move |_| i);
-        let class = if i == props.active {
-            "selected"
-        } else {
-            ""
-        };
-        html! {
-            <div class={class}>
-            <button onclick={onclick}>
-                {format!("user/{}:`{}`", i.0, athens.get_user(i).unwrap().alias)}
+    let mut hidden = Vec::new();
+    let mut main_button = None;
+    for user in athens.users().into_iter() {
+        let select_user = props.set_active.reform(move |_| user);
+        let select_user_button = html! {
+            <button onclick={select_user}>
+                {format!("user/{} {}", user.0, athens.get_user(user).unwrap().alias)}
             </button>
-            </div>
+        };
+        if user == props.active {
+            assert_eq!(main_button, None);
+            main_button = Some(select_user_button);
+        } else {
+            hidden.push(select_user_button);
         }
+    }
+    let add_user = props.add_user.reform(|_|());
+    hidden.push(html!{
+        <button onclick={add_user}>{"New user"}</button>
     });
 
-    let onclick = props.add_user.reform(|_|());
     html! {
         <div class="dropdown">
-            <button onclick={onclick}>{"AddUser"}</button>
+            {main_button.unwrap()}
             <div class="dropdown-content">
-                { for users }
+                {for hidden.into_iter()}
             </div>
         </div>
     }
@@ -396,12 +400,13 @@ impl Component for List {
 
         html! {
             <div>
+                <button onclick={toggle_sort}>{sort_msg}</button>
+                <p style="display:inline-block; padding: 0 4 0 5">{" according to "}</p>
                 <UserSelect
                     active={self.selected_user}
                     set_active={ctx.link().callback(|i| ListM::SetActiveUser(i))}
                     add_user={ctx.link().callback(|_| ListM::AddUser)}
                 />
-                <button onclick={toggle_sort}>{sort_msg}</button>
                 <ul>{ for entries_html }</ul>
                 <button onclick={addentry}>{"Add"}</button>
                 <button onclick={save}>{"Save"}</button>
