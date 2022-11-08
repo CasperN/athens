@@ -6,7 +6,7 @@ use yew::context::ContextHandle;
 use yew::prelude::*;
 // use yew::virtual_dom::AttrValue;
 
-use model::{AthensSpace, TaskId, UserId, SimpleAthensSpace};
+use model::{AthensSpace, SimpleAthensSpace, TaskId, UserId};
 
 // TODO: Should this be Box<dyn Athens> or Rc<dyn Athens>
 // or something?
@@ -84,7 +84,10 @@ impl Component for Entry {
             let a = self.athens.inner.clone();
             Callback::from(move |e: InputEvent| {
                 let t: HtmlTextAreaElement = e.target_unchecked_into();
-                a.set_task(model::Task { id, text: t.value() });
+                a.set_task(model::Task {
+                    id,
+                    text: t.value(),
+                });
             })
         };
         let value = self
@@ -121,10 +124,12 @@ fn draggable_entry(props: &DraggableEntryP) -> Html {
     // Communicate drag and drop to enclosing List
     let draggable = if props.draggable { "true" } else { "false" };
     let set_dragged = |d| props.callback.reform(move |_| ListM::SetDragged(d));
-    let set_dragged_over = |d| props.callback.reform(move |_| {
-        log::info!("set dragover");
-        ListM::SetDraggedOver(d)
-    });
+    let set_dragged_over = |d| {
+        props.callback.reform(move |_| {
+            log::info!("set dragover");
+            ListM::SetDraggedOver(d)
+        })
+    };
     let drop = props.callback.reform(|_| ListM::Dropped);
     let ondragover = {
         let order = props.order;
@@ -150,32 +155,50 @@ fn draggable_entry(props: &DraggableEntryP) -> Html {
 
 #[derive(PartialEq, Properties)]
 struct UserSelectP {
-    active: UserId,
-    set_active: Callback<UserId>,
+    active: Option<UserId>,
+    set_active: Callback<Option<UserId>>,
     add_user: Callback<()>,
 }
 #[function_component(UserSelect)]
 fn user_select(props: &UserSelectP) -> Html {
     let binding = use_context::<Athens>().unwrap();
     let athens = binding.get();
+
+    // User select is a main button showing the current selection and
+    // a list of hidden buttons that select other users, or "Everyone" or "Add user"
     let mut hidden = Vec::new();
     let mut main_button = None;
+
+    // "Everyone button"
+    let select_everyone = props.set_active.reform(move |_| None);
+    let select_everyone_button = html! {
+        <button onclick={select_everyone}>
+        {"Everyone"}
+        </button>
+    };
+    if props.active.is_none() {
+        main_button = Some(select_everyone_button);
+    } else {
+        hidden.push(select_everyone_button);
+    }
+
+    // Select user buttons
     for user in athens.users().into_iter() {
-        let select_user = props.set_active.reform(move |_| user);
+        let select_user = props.set_active.reform(move |_| Some(user));
         let select_user_button = html! {
             <button onclick={select_user}>
                 {format!("user/{} {}", user.0, athens.get_user(user).unwrap().alias)}
             </button>
         };
-        if user == props.active {
+        if Some(user) == props.active {
             assert_eq!(main_button, None);
             main_button = Some(select_user_button);
         } else {
             hidden.push(select_user_button);
         }
     }
-    let add_user = props.add_user.reform(|_|());
-    hidden.push(html!{
+    let add_user = props.add_user.reform(|_| ());
+    hidden.push(html! {
         <button onclick={add_user}>{"New user"}</button>
     });
 
@@ -189,14 +212,13 @@ fn user_select(props: &UserSelectP) -> Html {
     }
 }
 
-
 struct List {
     dragged: Option<usize>,
     dragged_over: Option<usize>,
     ordering: Ordering,
     athens: Athens,
     _handle: ContextHandle<Athens>,
-    selected_user: UserId,
+    selected_user: Option<UserId>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -227,7 +249,7 @@ enum ListM {
     // Null
     Ignore,
     //
-    SetActiveUser(UserId),
+    SetActiveUser(Option<UserId>),
     AddUser,
 }
 
@@ -266,20 +288,12 @@ impl Component for List {
         });
         let cb = ctx.link().callback(|_| ListM::Ignore);
         let (athens, _handle) = ctx.link().context::<Athens>(cb).unwrap();
-        let user_id = {
-            let users = athens.get().users();
-            if users.is_empty() {
-                athens.get().create_user().id
-            } else {
-                users[0]
-            }
-        };
         Self {
             dragged: None,
             dragged_over: None,
             ordering: Ordering::Importance,
             athens,
-            selected_user: user_id,
+            selected_user: None,
             _handle,
         }
     }
@@ -303,12 +317,12 @@ impl Component for List {
                 if let (Some(from), Some(to)) = (self.dragged, self.dragged_over) {
                     match self.ordering {
                         Ordering::Importance => {
-                            self.athens()
-                                .swap_user_importance(self.selected_user, from, to);
+                            let user = self.selected_user.unwrap();
+                            self.athens().swap_user_importance(user, from, to);
                         }
                         Ordering::Easiness => {
-                            self.athens()
-                                .swap_user_easiness(self.selected_user, from, to);
+                            let user = self.selected_user.unwrap();
+                            self.athens().swap_user_easiness(user, from, to);
                         }
                         _ => log::error!(
                             "Tried to drag and drop when ordering is {:?}",
@@ -359,12 +373,20 @@ impl Component for List {
         use Ordering::*;
         // TODO: selected user should be optional and
         // None should mean "aggregated", which are not draggable.
-        let task_ids = match self.ordering {
-            Importance => self.athens().user_importance(self.selected_user),
-            Easiness => self.athens().user_easiness(self.selected_user),
-            ImportantAndEasy => self.athens().user_important_and_easy(self.selected_user),
+        // TODO: They all should be OrderedTasks!!!!!
+        let task_ids: Vec<TaskId> = match (self.selected_user, self.ordering) {
+            (Some(user), Importance) => self.athens().user_importance(user).into_iter().collect(),
+            (Some(user), Easiness) => self.athens().user_easiness(user).into_iter().collect(),
+            (Some(user), ImportantAndEasy) => self
+                .athens()
+                .user_important_and_easy(user)
+                .into_iter()
+                .collect(),
+            (None, Importance) => self.athens().important_tasks(),
+            (None, Easiness) => self.athens().easy_tasks(),
+            (None, ImportantAndEasy) => self.athens().important_and_easy_tasks(),
         };
-        let draggable = self.ordering != Ordering::ImportantAndEasy;
+        let draggable = self.selected_user.is_some() && self.ordering != Ordering::ImportantAndEasy;
         let entries_html: Vec<Html> = task_ids
             .into_iter()
             .enumerate()
