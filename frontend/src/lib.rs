@@ -29,86 +29,56 @@ impl Athens {
     }
 }
 
-struct Entry {
-    editing: bool,
-    athens: Athens,
-    _handle: ContextHandle<Athens>,
-}
-
-#[derive(Clone, Copy)]
-enum EntryM {
-    StartEditing,
-    StopEditing,
-    Ignore,
-}
-
 #[derive(PartialEq, Properties)]
 struct EntryP {
     id: usize,
 }
-impl Component for Entry {
-    type Properties = EntryP;
-    type Message = EntryM;
+#[function_component(Entry)]
+fn entry(props: &EntryP) -> Html {
+    let editing = use_state(|| false);
+    let start_editing = {
+        let editing = editing.clone();
+        Callback::from(move |_| editing.set(true))
+    };
+    let stop_editing = {
+        let editing = editing.clone();
+        Callback::from(move |_| editing.set(false))
+    };
+    let stop_editing_on_enter = {
+        let editing = editing.clone();
+        Callback::from(move |e: KeyboardEvent| {
+            const ENTER_KEY_CODE: u32 = 13;
+            if e.key_code() == ENTER_KEY_CODE {
+                editing.set(false);
+            }
+        })
+    };
+    let binding = use_context::<Athens>().unwrap();
+    let athens = binding.get();
+    let emit_text = {
+        let id = TaskId(props.id);
+        let a = binding.inner.clone();
+        Callback::from(move |e: InputEvent| {
+            let t: HtmlTextAreaElement = e.target_unchecked_into();
+            a.set_task(model::Task {
+                id,
+                text: t.value(),
+            });
+        })
+    };
+    let value = athens.get_task(TaskId(props.id)).unwrap().text;
 
-    fn create(ctx: &Context<Self>) -> Self {
-        let cb = ctx.link().callback(|_| EntryM::Ignore);
-        let (athens, _handle) = ctx.link().context::<Athens>(cb).unwrap();
-        Entry {
-            athens,
-            _handle,
-            editing: false,
-        }
-    }
-    fn update(&mut self, _ctx: &Context<Self>, msg: EntryM) -> bool {
-        match msg {
-            EntryM::StartEditing => self.editing = true,
-            EntryM::StopEditing => self.editing = false,
-            EntryM::Ignore => (),
-        };
-        true
-    }
-    fn view(&self, ctx: &Context<Self>) -> Html {
-        let start_editing = ctx.link().callback(|_| EntryM::StartEditing);
-        let stop_editing = ctx.link().callback(|_| EntryM::StopEditing);
-        let stop_editing_on_enter = {
-            let link = ctx.link().clone();
-            Callback::from(move |e: KeyboardEvent| {
-                const ENTER_KEY_CODE: u32 = 13;
-                if e.key_code() == ENTER_KEY_CODE {
-                    link.send_message(EntryM::StopEditing);
-                }
-            })
-        };
-        let emit_text = {
-            let id = TaskId(ctx.props().id);
-            let a = self.athens.inner.clone();
-            Callback::from(move |e: InputEvent| {
-                let t: HtmlTextAreaElement = e.target_unchecked_into();
-                a.set_task(model::Task {
-                    id,
-                    text: t.value(),
-                });
-            })
-        };
-        let value = self
-            .athens
-            .get()
-            .get_task(TaskId(ctx.props().id))
-            .unwrap()
-            .text;
-
-        html! {
-            <input
-                type="text"
-                size="80"
-                disabled={!self.editing}
-                onclick={start_editing}
-                onfocusout={stop_editing}
-                value={value}
-                onkeypress={stop_editing_on_enter}
-                oninput={emit_text}
-            />
-        }
+    html! {
+        <input
+            type="text"
+            size="80"
+            disabled={!*editing}
+            onclick={start_editing}
+            onfocusout={stop_editing}
+            value={value}
+            onkeypress={stop_editing_on_enter}
+            oninput={emit_text}
+        />
     }
 }
 
