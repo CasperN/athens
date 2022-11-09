@@ -94,18 +94,12 @@ fn draggable_entry(props: &DraggableEntryP) -> Html {
     // Communicate drag and drop to enclosing List
     let draggable = if props.draggable { "true" } else { "false" };
     let set_dragged = |d| props.callback.reform(move |_| ListM::SetDragged(d));
-    let set_dragged_over = |d| {
-        props.callback.reform(move |_| {
-            log::info!("set dragover");
-            ListM::SetDraggedOver(d)
-        })
-    };
+    let set_dragged_over = |d| props.callback.reform(move |_| ListM::SetDraggedOver(d));
     let drop = props.callback.reform(|_| ListM::Dropped);
     let ondragover = {
         let order = props.order;
         props.callback.reform(move |e: DragEvent| {
             e.prevent_default(); // Neccessary for ondrop to be called.
-            log::info!("on dragover!");
             ListM::SetDraggedOver(Some(order))
         })
     };
@@ -131,11 +125,10 @@ struct UserSelectP {
 }
 #[function_component(UserSelect)]
 fn user_select(props: &UserSelectP) -> Html {
-    let binding = use_context::<Athens>().unwrap();
-    let athens = binding.get();
-
     // User select is a main button showing the current selection and
-    // a list of hidden buttons that select other users, or "Everyone" or "Add user"
+    // a list of hidden buttons. The buttons are either "Everyone" or
+    // the actual users. Also there's an "Add user" button at the end
+    // of the hidden buttons.
     let mut hidden = Vec::new();
     let mut main_button = None;
 
@@ -146,6 +139,7 @@ fn user_select(props: &UserSelectP) -> Html {
         {"Everyone"}
         </button>
     };
+    // The main visible button is "Everyone" or it will be some user, set later.
     if props.active.is_none() {
         main_button = Some(select_everyone_button);
     } else {
@@ -153,6 +147,8 @@ fn user_select(props: &UserSelectP) -> Html {
     }
 
     // Select user buttons
+    let binding = use_context::<Athens>().unwrap();
+    let athens = binding.get();
     for user in athens.users().into_iter() {
         let select_user = props.set_active.reform(move |_| Some(user));
         let select_user_button = html! {
@@ -167,6 +163,8 @@ fn user_select(props: &UserSelectP) -> Html {
             hidden.push(select_user_button);
         }
     }
+    let main_button = main_button.expect("Active user not found");
+
     let add_user = props.add_user.reform(|_| ());
     hidden.push(html! {
         <button onclick={add_user}>{"New user"}</button>
@@ -174,7 +172,7 @@ fn user_select(props: &UserSelectP) -> Html {
 
     html! {
         <div class="dropdown">
-            {main_button.unwrap()}
+            {main_button}
             <div class="dropdown-content">
                 {for hidden.into_iter()}
             </div>
