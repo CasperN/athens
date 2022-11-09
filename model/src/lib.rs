@@ -48,9 +48,9 @@ pub trait AthensSpace {
     // TODO: Get/Set space alias
 
     fn tasks(&self) -> Vec<TaskId>; // TODO: does this make sense?
-    fn important_tasks(&self) -> Vec<TaskId>;
-    fn easy_tasks(&self) -> Vec<TaskId>;
-    fn important_and_easy_tasks(&self) -> Vec<TaskId>;
+    fn important_tasks(&self) -> OrderedTasks;
+    fn easy_tasks(&self) -> OrderedTasks;
+    fn important_and_easy_tasks(&self) -> OrderedTasks;
     fn users(&self) -> Vec<UserId>;
 
     // Crud for users

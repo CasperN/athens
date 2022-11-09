@@ -11,17 +11,17 @@ impl AthensSpace for ParallelSimpleAthensSpace {
     fn tasks(&self) -> Vec<TaskId> {
         self.lock().unwrap().tasks.iter().map(|i| i.id).collect()
     }
-    fn important_tasks(&self) -> Vec<TaskId> {
-        self.lock().unwrap().importance().0
+    fn important_tasks(&self) -> OrderedTasks {
+        self.lock().unwrap().importance()
     }
-    fn easy_tasks(&self) -> Vec<TaskId> {
-        self.lock().unwrap().easiness().0
+    fn easy_tasks(&self) -> OrderedTasks {
+        self.lock().unwrap().easiness()
     }
-    fn important_and_easy_tasks(&self) -> Vec<TaskId> {
+    fn important_and_easy_tasks(&self) -> OrderedTasks {
         let space = self.lock().unwrap();
         let i = space.importance();
         let e = space.easiness();
-        combine_important_and_easy(&i, &e).0
+        combine_important_and_easy(&i, &e)
     }
     fn create_user(&self) -> User {
         self.lock().unwrap().new_user().user.clone()

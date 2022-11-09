@@ -339,17 +339,10 @@ impl Component for List {
     }
     fn view(&self, ctx: &Context<Self>) -> Html {
         use Ordering::*;
-        // TODO: selected user should be optional and
-        // None should mean "aggregated", which are not draggable.
-        // TODO: They all should be OrderedTasks!!!!!
-        let task_ids: Vec<TaskId> = match (self.selected_user, self.ordering) {
-            (Some(user), Importance) => self.athens().user_importance(user).into_iter().collect(),
-            (Some(user), Easiness) => self.athens().user_easiness(user).into_iter().collect(),
-            (Some(user), ImportantAndEasy) => self
-                .athens()
-                .user_important_and_easy(user)
-                .into_iter()
-                .collect(),
+        let task_ids = match (self.selected_user, self.ordering) {
+            (Some(user), Importance) => self.athens().user_importance(user),
+            (Some(user), Easiness) => self.athens().user_easiness(user),
+            (Some(user), ImportantAndEasy) => self.athens().user_important_and_easy(user),
             (None, Importance) => self.athens().important_tasks(),
             (None, Easiness) => self.athens().easy_tasks(),
             (None, ImportantAndEasy) => self.athens().important_and_easy_tasks(),
