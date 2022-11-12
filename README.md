@@ -4,12 +4,12 @@ Athens is a group task management application based on
 manual bubble sort and ranked pairs voting.
 
 ## TODO
-- Sort tasks by aggregated importance/easiness
-- Userselect
-  - Option to add users
-  - Edit user aliases
-  - Delete users
+- Deletion of users and tasks
+- User weights
 - Database
+  - Autosave
   - Use a real datastore of some kind
   - Fuzz/Diff test DB based AthensSpace against SimpleAthensSpace
-- Delete tasks
+- Tasks blocking other tasks in a DAG
+- Grouping tasks into projects
+- Tagging tasks and set-search using tags
