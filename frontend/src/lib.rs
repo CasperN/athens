@@ -151,16 +151,67 @@ fn user_select(props: &UserSelectP) -> Html {
     let athens = binding.get();
     for user in athens.users().into_iter() {
         let select_user = props.set_active.reform(move |_| Some(user));
-        let select_user_button = html! {
-            <button onclick={select_user}>
-                {format!("user/{} {}", user.0, athens.get_user(user).unwrap().alias)}
-            </button>
+        let alias = athens.get_user(user).unwrap().alias;
+        let value = if alias.is_empty() {
+            format!("user/{}", user.0)
+        } else {
+            alias
         };
         if Some(user) == props.active {
             assert_eq!(main_button, None);
-            main_button = Some(select_user_button);
+            let editing = use_state(|| false);
+            // TODO Refactor out the common code with Entry
+            let stop_editing = {
+                let editing = editing.clone();
+                Callback::from(move |_| editing.set(false))
+            };
+            let stop_editing_on_enter = {
+                let editing = editing.clone();
+                Callback::from(move |e: KeyboardEvent| {
+                    const ENTER_KEY_CODE: u32 = 13;
+                    if e.key_code() == ENTER_KEY_CODE {
+                        editing.set(false);
+                    }
+                })
+            };
+            let start_editing = {
+                let editing = editing.clone();
+                Callback::from(move |_| editing.set(true))
+            };
+            let set_user_alias = {
+                let a = binding.inner.clone();
+                Callback::from(move |e: InputEvent| {
+                    let t: HtmlTextAreaElement = e.target_unchecked_into();
+                    a.set_user(model::User {
+                        id: user,
+                        alias: t.value(),
+                        weight: 1,
+                    });
+                })
+            };
+
+            main_button = Some(html! {
+                <button onclick={start_editing}>
+                    if *editing {
+                        <input
+                            contenteditable={format!("{}", *editing)}
+                            size=10
+                            oninput={set_user_alias}
+                            onkeypress={stop_editing_on_enter}
+                            onfocusout={stop_editing}
+                            value={value}
+                        />
+                    } else {
+                        {value}
+                    }
+                </button>
+            });
         } else {
-            hidden.push(select_user_button);
+            hidden.push(html! {
+                <button onclick={select_user}>
+                    {value}
+                </button>
+            });
         }
     }
     let main_button = main_button.expect("Active user not found");
