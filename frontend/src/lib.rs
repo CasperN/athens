@@ -30,54 +30,72 @@ impl Athens {
 }
 
 #[derive(PartialEq, Properties)]
-struct EntryP {
-    id: usize,
+struct EditableInputP {
+    editable: bool,
+    text: String,
+    size: usize, // TODO: this should be in css?
+    set_text: Callback<String>,
+    set_editable: Callback<bool>,
 }
-#[function_component(Entry)]
-fn entry(props: &EntryP) -> Html {
-    let editing = use_state(|| false);
-    let start_editing = {
-        let editing = editing.clone();
-        Callback::from(move |_| editing.set(true))
-    };
-    let stop_editing = {
-        let editing = editing.clone();
-        Callback::from(move |_| editing.set(false))
-    };
-    let stop_editing_on_enter = {
-        let editing = editing.clone();
+
+#[function_component(EditableInput)]
+fn editable_input(props: &EditableInputP) -> Html {
+    let onkeyup = {
+        let set_editable = props.set_editable.clone();
         Callback::from(move |e: KeyboardEvent| {
             const ENTER_KEY_CODE: u32 = 13;
             if e.key_code() == ENTER_KEY_CODE {
-                editing.set(false);
+                set_editable.emit(false);
             }
         })
     };
-    let binding = use_context::<Athens>().unwrap();
-    let athens = binding.get();
-    let emit_text = {
-        let id = TaskId(props.id);
-        let a = binding.inner.clone();
+    let oninput = {
+        let set_text = props.set_text.clone();
+        // TODO: Probably should not emit on every keypress,
+        // but Keybaord event values are behind for some reason.
         Callback::from(move |e: InputEvent| {
             let t: HtmlTextAreaElement = e.target_unchecked_into();
-            a.set_task(model::Task {
-                id,
-                text: t.value(),
-            });
+            set_text.emit(t.value());
         })
     };
-    let value = athens.get_task(TaskId(props.id)).unwrap().text;
-
     html! {
         <input
             type="text"
-            size="80"
-            disabled={!*editing}
-            onclick={start_editing}
-            onfocusout={stop_editing}
-            value={value}
-            onkeypress={stop_editing_on_enter}
-            oninput={emit_text}
+            size={format!("{}", props.size)}
+            disabled={!props.editable}
+            onfocusout={props.set_editable.reform(|_| false)}
+            onclick={props.set_editable.reform(|_| true)}
+            value={props.text.clone()}
+            onkeyup={onkeyup}
+            oninput={oninput}
+        />
+    }
+}
+
+#[derive(PartialEq, Properties)]
+struct TaskInputP {
+    id: usize,
+}
+#[function_component(TaskInput)]
+fn task_input(props: &TaskInputP) -> Html {
+    let editing = use_state(|| false);
+    let binding = use_context::<Athens>().unwrap();
+    let athens = binding.get();
+    let text = athens.get_task(TaskId(props.id)).unwrap().text;
+    let set_text = {
+        let a = binding.inner.clone(); // TODO bad abstraction hack.
+        let id = TaskId(props.id);
+        Callback::from(move |text| {
+            a.set_task(model::Task { id, text });
+        })
+    };
+    html! {
+        <EditableInput
+            editable={*editing}
+            size=80
+            text={text}
+            set_editable={Callback::from(move |b| editing.set(b))}
+            set_text={set_text}
         />
     }
 }
@@ -160,31 +178,16 @@ fn user_select(props: &UserSelectP) -> Html {
         if Some(user) == props.active {
             assert_eq!(main_button, None);
             let editing = use_state(|| false);
-            // TODO Refactor out the common code with Entry
-            let stop_editing = {
-                let editing = editing.clone();
-                Callback::from(move |_| editing.set(false))
-            };
-            let stop_editing_on_enter = {
-                let editing = editing.clone();
-                Callback::from(move |e: KeyboardEvent| {
-                    const ENTER_KEY_CODE: u32 = 13;
-                    if e.key_code() == ENTER_KEY_CODE {
-                        editing.set(false);
-                    }
-                })
-            };
             let start_editing = {
                 let editing = editing.clone();
                 Callback::from(move |_| editing.set(true))
             };
             let set_user_alias = {
                 let a = binding.inner.clone();
-                Callback::from(move |e: InputEvent| {
-                    let t: HtmlTextAreaElement = e.target_unchecked_into();
+                Callback::from(move |alias| {
                     a.set_user(model::User {
                         id: user,
-                        alias: t.value(),
+                        alias,
                         weight: 1,
                     });
                 })
@@ -193,13 +196,12 @@ fn user_select(props: &UserSelectP) -> Html {
             main_button = Some(html! {
                 <button onclick={start_editing}>
                     if *editing {
-                        <input
-                            contenteditable={format!("{}", *editing)}
+                        <EditableInput
+                            editable=true
                             size=10
-                            oninput={set_user_alias}
-                            onkeypress={stop_editing_on_enter}
-                            onfocusout={stop_editing}
-                            value={value}
+                            text={value}
+                            set_editable={Callback::from(move |b| editing.set(b))}
+                            set_text={set_user_alias}
                         />
                     } else {
                         {value}
@@ -409,7 +411,7 @@ impl Component for List {
                         callback={ctx.link().callback(|x| x)}
                         draggable={draggable} order={order}
                     >
-                        <Entry id={id}/>
+                        <TaskInput id={id}/>
                     </DraggableEntry>
                 }
             })
