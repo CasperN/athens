@@ -183,7 +183,7 @@ fn user_select(props: &UserSelectP) -> Html {
                 Callback::from(move |_| editing.set(true))
             };
             let set_user_alias = {
-                let a = binding.inner.clone();
+                let a = binding.inner.clone(); // TODO hack?
                 Callback::from(move |alias| {
                     a.set_user(model::User {
                         id: user,
