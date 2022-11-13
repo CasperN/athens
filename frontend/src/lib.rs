@@ -1,6 +1,7 @@
 #![feature(async_closure)]
 use gloo_net::http::Request;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 use web_sys::HtmlTextAreaElement;
 use yew::context::ContextHandle;
 use yew::prelude::*;
@@ -36,6 +37,8 @@ struct EditableInputP {
     size: usize, // TODO: this should be in css?
     set_text: Callback<String>,
     set_editable: Callback<bool>,
+    #[prop_or_default]
+    id: Option<&'static str>,
 }
 
 #[function_component(EditableInput)]
@@ -61,6 +64,7 @@ fn editable_input(props: &EditableInputP) -> Html {
     html! {
         <input
             type="text"
+            id={props.id}
             size={format!("{}", props.size)}
             disabled={!props.editable}
             onfocusout={props.set_editable.reform(|_| false)}
@@ -192,13 +196,35 @@ fn user_select(props: &UserSelectP) -> Html {
                     });
                 })
             };
+            if *editing {
+                // When the user clicks on the main user button, we set
+                // `editing` to true and render a new input element to edit the
+                // selected user's name. After element is rendered, focus on it,
+                // so users are immediately editing the username and do not have
+                // to click twice.
+                use_effect(|| {
+                    web_sys::window()
+                        .expect("expected a window")
+                        .document()
+                        .expect("expected a document")
+                        .query_selector("#selected-user-input")
+                        .expect("invalid query")
+                        .expect("could not find selected user input element")
+                        .dyn_ref::<web_sys::HtmlElement>()
+                        .expect("was not an html element")
+                        .focus()
+                        .expect("Failed to focus");
+                    || {}
+                });
+            }
 
             main_button = Some(html! {
-                <button onclick={start_editing}>
+                <button onclick={start_editing} >
                     if *editing {
                         <EditableInput
                             editable=true
                             size=10
+                            id="selected-user-input"
                             text={value}
                             set_editable={Callback::from(move |b| editing.set(b))}
                             set_text={set_user_alias}
