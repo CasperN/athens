@@ -117,11 +117,11 @@ impl TaskIdDag {
                 .collect::<BTreeSet<_>>();
 
             for (node, children) in self.0.iter() {
-                if sort.contains(&node) {
+                if sort.contains(node) {
                     continue;
                 }
                 for child in children {
-                    unsorted_nodes.remove(&child);
+                    unsorted_nodes.remove(child);
                 }
             }
             let prev_len = sort.len();

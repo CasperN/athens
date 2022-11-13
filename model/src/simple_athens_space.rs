@@ -1,6 +1,7 @@
-#![allow(unused_variables)] // TODO: Remove
-
-use super::*; // TODO: explicit import
+use super::{
+    ranked_pairs_ordering, AthensSpace, OrderedTasks, SpaceId, Task, TaskId, User, UserId,
+};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 pub type ParallelSimpleAthensSpace = std::sync::Arc<std::sync::Mutex<SimpleAthensSpace>>;
 
@@ -67,7 +68,7 @@ impl AthensSpace for ParallelSimpleAthensSpace {
         let space = self.lock().unwrap();
         let user = space.user(id);
         combine_important_and_easy(&user.importance, &user.easiness)
-   }
+    }
     fn set_user_importance(&self, id: UserId, o: OrderedTasks) -> Option<OrderedTasks> {
         // TODO: Verification of taskIds.
         self.lock().unwrap().mut_user(id).map(|u| {
@@ -113,7 +114,7 @@ fn combine_important_and_easy(importance: &OrderedTasks, easiness: &OrderedTasks
 }
 
 // One implementation of an AthensSpace
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SimpleAthensSpace {
     id: SpaceId,
     alias: String,
@@ -126,7 +127,7 @@ impl Default for SimpleAthensSpace {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UserWithOrds {
     user: User,
     importance: OrderedTasks, // TODO: Setter
@@ -167,7 +168,7 @@ impl SimpleAthensSpace {
         });
         self.users.last_mut().unwrap()
     }
-    pub fn task_ids<'a>(&'a self) -> impl Iterator<Item=TaskId> + 'a {
+    pub fn task_ids(&self) -> impl Iterator<Item = TaskId> + '_ {
         self.tasks.iter().map(|t| t.id)
     }
     pub fn user(&self, id: UserId) -> &UserWithOrds {

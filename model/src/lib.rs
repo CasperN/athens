@@ -11,7 +11,7 @@ pub use simple_athens_space::*;
 
 /// Permenant unique identifier for a user.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct UserId(pub usize); // TODO: No Pub, only needed for migration because of name conflict
+pub struct UserId(pub usize);
 
 /// Permenant unique identifier for a task.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -99,10 +99,14 @@ impl OrderedTasks {
         let task = self.0.remove(from);
         self.0.insert(to, task);
     }
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = TaskId> + 'a {
-        self.0.iter().map(|id| *id)
+    pub fn iter(&self) -> impl Iterator<Item = TaskId> + '_ {
+        self.0.iter().copied()
     }
-    pub fn into_iter(self) -> impl Iterator<Item = TaskId> {
+}
+impl IntoIterator for OrderedTasks {
+    type Item = TaskId;
+    type IntoIter = std::vec::IntoIter<TaskId>;
+    fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }

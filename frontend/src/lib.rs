@@ -5,12 +5,11 @@ use wasm_bindgen::JsCast;
 use web_sys::HtmlTextAreaElement;
 use yew::context::ContextHandle;
 use yew::prelude::*;
-// use yew::virtual_dom::AttrValue;
 
 use model::{AthensSpace, SimpleAthensSpace, TaskId, UserId};
 
 // TODO: Should this be Box<dyn Athens> or Rc<dyn Athens>
-// or something?
+// or something? How do I make this more dynamic/substitutable?
 #[derive(Clone, Default)]
 struct Athens {
     inner: model::ParallelSimpleAthensSpace,
@@ -87,10 +86,10 @@ fn task_input(props: &TaskInputP) -> Html {
     let athens = binding.get();
     let text = athens.get_task(TaskId(props.id)).unwrap().text;
     let set_text = {
-        let a = binding.inner.clone(); // TODO bad abstraction hack.
+        let a = binding.clone();
         let id = TaskId(props.id);
         Callback::from(move |text| {
-            a.set_task(model::Task { id, text });
+            a.get().set_task(model::Task { id, text });
         })
     };
     html! {
@@ -181,15 +180,17 @@ fn user_select(props: &UserSelectP) -> Html {
         };
         if Some(user) == props.active {
             assert_eq!(main_button, None);
+            // If the main button is some user, there's special behavior:
+            // Clicking on the button starts editing the user's alias.
             let editing = use_state(|| false);
             let start_editing = {
                 let editing = editing.clone();
                 Callback::from(move |_| editing.set(true))
             };
             let set_user_alias = {
-                let a = binding.inner.clone(); // TODO hack?
+                let a = binding.clone();
                 Callback::from(move |alias| {
-                    a.set_user(model::User {
+                    a.get().set_user(model::User {
                         id: user,
                         alias,
                         weight: 1,
@@ -466,7 +467,7 @@ impl Component for List {
                 <p style="display:inline-block; padding: 0 4 0 5">{" according to "}</p>
                 <UserSelect
                     active={self.selected_user}
-                    set_active={ctx.link().callback(|i| ListM::SetActiveUser(i))}
+                    set_active={ctx.link().callback(ListM::SetActiveUser)}
                     add_user={ctx.link().callback(|_| ListM::AddUser)}
                 />
                 <ul>{ for entries_html }</ul>
@@ -481,7 +482,7 @@ impl Component for List {
 fn app() -> Html {
     let space = Athens::new();
     html! {
-        <ContextProvider<Athens> context={space.clone()}>
+        <ContextProvider<Athens> context={space}>
         <link href="public/style.css" rel="stylesheet"/>
         <h1>{"Lists!"}</h1>
         <List/>
